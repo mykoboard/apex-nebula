@@ -1,0 +1,504 @@
+import { createMachine, assign } from 'xstate';
+import { LedgerEntry } from '@mykoboard/integration';
+
+// Type definitions
+export type Color = 'red' | 'green' | 'blue' | 'yellow';
+export type HexType =
+    | 'HomeNebula'
+    | 'Void'
+    | 'AsteroidScrap' | 'SignalPing' | 'GravityEddy' | 'LegacyCode'  // Tier 1
+    | 'SolarFlare' | 'EncryptedRelay' | 'IonCloud' | 'DeepSpaceBuoy' // Tier 2
+    | 'Supernova' | 'OmegaArchive' | 'BlackHole' | 'NeutronStar' // Tier 3
+    | 'Singularity';                                               // Core
+export type GamePhase = 'setup' | 'mutation' | 'phenotype' | 'environmental' | 'competitive' | 'optimization';
+export type AttributeType = 'NAV' | 'LOG' | 'DEF' | 'SCN';
+
+export interface PlayerGenome {
+    playerId: string;
+    stability: number;
+    dataClusters: number;
+    rawMatter: number;
+    insightTokens: number;
+    lockedSlots: number[]; // Future use for frozen attributes
+    baseAttributes: Record<AttributeType, number>; // Console cubes (0-10)
+    mutationModifiers: Record<AttributeType, number>; // Stochastic noise (+/-)
+    cubePool: number; // Remaining cubes to distribute during setup
+}
+
+export interface PlayerPiece {
+    playerId: string;
+    hexId: string;
+}
+
+export interface HexCell {
+    id: string;
+    type: HexType;
+    threshold: number;
+    resourceYield: number;
+    targetAttribute: AttributeType | AttributeType[]; // What is tested here
+    x: number;
+    y: number;
+    depletedUntilRound?: number;
+}
+
+export interface EnvironmentalEvent {
+    id: string;
+    name: string;
+    description: string;
+    targetAttribute: AttributeType;
+    threshold: number;
+    penalty: number | { type: 'stability' | 'data' | 'matter' | 'displacement' | 'mutation' | 'blindness', amount: number };
+}
+
+export interface Player {
+    id: string;
+    name: string;
+    color: Color;
+}
+
+export interface ApexNebulaContext {
+    players: Player[];
+    currentPlayerIndex: number;
+    genomes: PlayerGenome[];
+    pieces: PlayerPiece[];
+    hexGrid: HexCell[];
+    eventDeck: EnvironmentalEvent[];
+    currentEvent: EnvironmentalEvent | null;
+    gamePhase: GamePhase;
+    round: number;
+    isInitiator: boolean;
+    ledger?: LedgerEntry[];
+    winners: string[];
+    lastMutationRoll: number | null;
+    lastHarvestRoll: number | null;
+    lastHarvestSuccess: boolean | null;
+}
+
+export type ApexNebulaEvent =
+    | { type: 'SYNC_STATE'; context: Partial<ApexNebulaContext> }
+    | { type: 'MOVE_PLAYER'; playerId: string; hexId: string }
+    | { type: 'SPEND_INSIGHT'; playerId: string; amount: number }
+    | { type: 'DISTRIBUTE_CUBES'; playerId: string; attribute: AttributeType; amount: number }
+    | { type: 'FINALIZE_SETUP'; playerId: string }
+    | { type: 'COLONIZE_PLANET'; playerId: string; resourceType?: 'Matter' | 'Data' }
+    | { type: 'HUSTLE'; attackerId: string; defenderId: string; category: string }
+    | { type: 'NEXT_PHASE' }
+    | { type: 'RESET' };
+
+// Simplified Event Deck
+export const INITIAL_EVENT_DECK: EnvironmentalEvent[] = [
+    { id: '1', name: 'Gravitational Wave', description: 'Requires high Navigation', targetAttribute: 'NAV', threshold: 4, penalty: { type: 'stability', amount: 1 } },
+    { id: '2', name: 'Data Corruption', description: 'Requires high Logic', targetAttribute: 'LOG', threshold: 4, penalty: { type: 'data', amount: 1 } },
+    { id: '3', name: 'Micrometeoroids', description: 'Requires high Defense', targetAttribute: 'DEF', threshold: 4, penalty: { type: 'stability', amount: 1 } },
+];
+
+// Hex grid initialization (37-Hex Tiered Galaxy + Outside Home Nebulas)
+export const createHexGrid = (): HexCell[] => {
+    const hexes: HexCell[] = [];
+    const maxRadius = 4;
+
+    const tier3Dist: HexType[] = ['Supernova', 'OmegaArchive', 'BlackHole', 'NeutronStar', 'Void', 'Void'];
+    const tier2Dist: HexType[] = [
+        'SolarFlare', 'SolarFlare', 'EncryptedRelay', 'EncryptedRelay',
+        'IonCloud', 'IonCloud', 'DeepSpaceBuoy', 'DeepSpaceBuoy',
+        'Void', 'Void', 'Void', 'Void'
+    ];
+    const tier1Dist: HexType[] = [
+        'AsteroidScrap', 'AsteroidScrap', 'AsteroidScrap',
+        'SignalPing', 'SignalPing', 'SignalPing',
+        'GravityEddy', 'GravityEddy', 'GravityEddy',
+        'LegacyCode', 'LegacyCode', 'LegacyCode',
+        'Void', 'Void', 'Void', 'Void', 'Void', 'Void'
+    ];
+
+    const shuffle = <T>(array: T[]) => [...array].sort(() => Math.random() - 0.5);
+    const s3 = shuffle(tier3Dist);
+    const s2 = shuffle(tier2Dist);
+    const s1 = shuffle(tier1Dist);
+
+    let i3 = 0, i2 = 0, i1 = 0;
+
+    for (let q = -maxRadius; q <= maxRadius; q++) {
+        for (let r = Math.max(-maxRadius, -q - maxRadius); r <= Math.min(maxRadius, -q + maxRadius); r++) {
+            const distance = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
+            const id = `H-${q}-${r}`;
+
+            let type: HexType = 'Void';
+            let threshold = 0;
+            let yield_res = 0;
+            let targetAttr: AttributeType | AttributeType[] = 'DEF';
+
+            if (distance === 0) {
+                type = 'Singularity';
+                threshold = 8;
+                yield_res = 0;
+                targetAttr = ['NAV', 'LOG', 'DEF', 'SCN'];
+            } else if (distance === 1) {
+                type = s3[i3++];
+                threshold = type === 'Void' ? 5 : 6;
+                yield_res = type === 'Void' ? 0 : 4;
+                if (type === 'Supernova') targetAttr = ['DEF', 'NAV'];
+                else if (type === 'OmegaArchive') targetAttr = ['LOG', 'SCN'];
+                else if (type === 'BlackHole') targetAttr = ['NAV', 'DEF'];
+                else if (type === 'NeutronStar') targetAttr = ['SCN', 'LOG'];
+                else if (type === 'Void') targetAttr = [];
+            } else if (distance === 2) {
+                type = s2[i2++];
+                threshold = type === 'Void' ? 3 : 4;
+                yield_res = type === 'Void' ? 0 : 2;
+                if (type === 'SolarFlare') targetAttr = 'DEF';
+                else if (type === 'EncryptedRelay') targetAttr = 'LOG';
+                else if (type === 'IonCloud') targetAttr = 'NAV';
+                else if (type === 'DeepSpaceBuoy') targetAttr = 'SCN';
+                else if (type === 'Void') targetAttr = [];
+            } else if (distance === 3) {
+                type = s1[i1++];
+                threshold = type === 'Void' ? 1 : 2;
+                yield_res = type === 'Void' ? 0 : 1;
+                if (type === 'AsteroidScrap') targetAttr = 'DEF';
+                else if (type === 'SignalPing') targetAttr = 'SCN';
+                else if (type === 'GravityEddy') targetAttr = 'NAV';
+                else if (type === 'LegacyCode') targetAttr = 'LOG';
+                else if (type === 'Void') targetAttr = [];
+            } else if (distance === 4) {
+                const isHomePos = (q === 4 && r === -2) || (q === -2 && r === 4) || (q === -4 && r === 2) || (q === 2 && r === -4);
+                if (isHomePos) {
+                    type = 'HomeNebula';
+                    threshold = 0;
+                    yield_res = 0;
+                } else {
+                    continue;
+                }
+            }
+
+            hexes.push({
+                id,
+                type,
+                threshold,
+                resourceYield: yield_res,
+                targetAttribute: targetAttr,
+                x: q,
+                y: r
+            });
+        }
+    }
+    return hexes;
+};
+
+// Helper: Calculate fitness score based on attributes
+export const calculateFitness = (genome: PlayerGenome, target: { targetAttribute: AttributeType | AttributeType[] } | null): number => {
+    if (!target) return 0;
+    const attrs = Array.isArray(target.targetAttribute) ? target.targetAttribute : [target.targetAttribute];
+    let totalStats = 0;
+    attrs.forEach(attr => {
+        const base = genome.baseAttributes?.[attr] || 0;
+        const mod = genome.mutationModifiers?.[attr] || 0;
+        totalStats += base + mod;
+    });
+    return totalStats;
+};
+
+// Helper: Check win condition (Gen 0: 30 Data Clusters)
+export const checkWinCondition = (genome: PlayerGenome): boolean => {
+    return genome.dataClusters >= 30;
+};
+
+// XState machine
+export const apexNebulaMachine = createMachine({
+    types: {} as {
+        context: ApexNebulaContext;
+        events: ApexNebulaEvent;
+    },
+    id: 'apexNebula',
+    initial: 'waitingForPlayers',
+    context: ({ input }: { input: any }) => ({
+        players: input?.players ?? [],
+        currentPlayerIndex: 0,
+        genomes: input?.genomes ?? [],
+        pieces: input?.pieces ?? [],
+        hexGrid: createHexGrid(),
+        eventDeck: [...INITIAL_EVENT_DECK],
+        currentEvent: null,
+        gamePhase: 'setup' as GamePhase,
+        round: 1,
+        isInitiator: input?.isInitiator ?? false,
+        winners: [],
+        lastMutationRoll: null,
+        lastHarvestRoll: null,
+        lastHarvestSuccess: null,
+    }),
+    states: {
+        waitingForPlayers: {
+            on: {
+                SYNC_STATE: {
+                    target: 'setupPhase',
+                    actions: 'syncState',
+                },
+            },
+        },
+        setupPhase: {
+            entry: assign({ gamePhase: 'setup' }),
+            on: {
+                DISTRIBUTE_CUBES: {
+                    actions: 'distributeCubes',
+                },
+                FINALIZE_SETUP: {
+                    target: 'mutationPhase',
+                    actions: 'finalizeSetup',
+                },
+            },
+        },
+        mutationPhase: {
+            entry: assign({ gamePhase: 'mutation' }),
+            on: {
+                NEXT_PHASE: {
+                    target: 'phenotypePhase',
+                },
+            },
+        },
+        phenotypePhase: {
+            entry: assign({ gamePhase: 'phenotype' }),
+            on: {
+                MOVE_PLAYER: {
+                    actions: 'movePlayer',
+                },
+                COLONIZE_PLANET: {
+                    actions: 'colonizePlanet',
+                },
+                NEXT_PHASE: {
+                    target: 'environmentalPhase',
+                },
+            },
+        },
+        environmentalPhase: {
+            entry: [
+                assign({ gamePhase: 'environmental' }),
+                'drawEnvironmentalEvent',
+            ],
+            on: {
+                NEXT_PHASE: {
+                    target: 'competitivePhase',
+                    actions: 'evaluateEnvironmentalFitness',
+                },
+            },
+        },
+        competitivePhase: {
+            entry: assign({ gamePhase: 'competitive' }),
+            on: {
+                HUSTLE: {
+                    actions: 'resolveHustle',
+                },
+                NEXT_PHASE: {
+                    target: 'optimizationPhase',
+                },
+            },
+        },
+        optimizationPhase: {
+            entry: assign({ gamePhase: 'optimization' }),
+            on: {
+                NEXT_PHASE: [
+                    { target: 'won', guard: 'checkWin' },
+                    { target: 'nextRound' },
+                ],
+            },
+        },
+        nextRound: {
+            always: {
+                target: 'mutationPhase',
+                actions: 'incrementRound',
+            },
+        },
+        won: {
+            entry: 'recordWinner',
+            on: {
+                RESET: {
+                    target: 'mutationPhase',
+                    actions: 'resetGame',
+                },
+            },
+        },
+    },
+    on: {
+        SYNC_STATE: {
+            actions: 'syncState',
+        },
+    },
+}, {
+    actions: {
+        syncState: assign(({ event }) => {
+            if (event.type !== 'SYNC_STATE') return {};
+            return event.context;
+        }),
+        spendInsightForReroll: assign(({ context, event }) => {
+            if (event.type !== 'SPEND_INSIGHT') return {};
+            const { playerId, amount } = event;
+            const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
+            if (genomeIndex === -1) return {};
+            const genome = context.genomes[genomeIndex];
+            if (genome.insightTokens < amount) return {};
+            const newGenomes = [...context.genomes];
+            newGenomes[genomeIndex] = {
+                ...genome,
+                insightTokens: genome.insightTokens - amount,
+            };
+            return { genomes: newGenomes };
+        }),
+        distributeCubes: assign(({ context, event }) => {
+            if (event.type !== 'DISTRIBUTE_CUBES') return {};
+            const { playerId, attribute, amount } = event;
+            const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
+            if (genomeIndex === -1) return {};
+            const genome = context.genomes[genomeIndex];
+            const currentCubes = genome.baseAttributes[attribute];
+            const newCubes = currentCubes + amount;
+            if (newCubes < 1 || newCubes > 10) return {};
+            if (genome.cubePool - amount < 0 && amount > 0) return {};
+            const newGenomes = [...context.genomes];
+            newGenomes[genomeIndex] = {
+                ...genome,
+                baseAttributes: {
+                    ...genome.baseAttributes,
+                    [attribute]: newCubes
+                },
+                cubePool: genome.cubePool - amount
+            };
+            return { genomes: newGenomes };
+        }),
+        finalizeSetup: assign(({ event }) => {
+            if (event.type !== 'FINALIZE_SETUP') return {};
+            return { gamePhase: 'mutation' as GamePhase };
+        }),
+        movePlayer: assign(({ context, event }) => {
+            if (event.type !== 'MOVE_PLAYER') return {};
+            const { playerId, hexId } = event;
+            const pieceIndex = context.pieces.findIndex(p => p.playerId === playerId);
+            if (pieceIndex === -1) return {};
+            const newPieces = [...context.pieces];
+            newPieces[pieceIndex] = { ...newPieces[pieceIndex], hexId };
+            return { pieces: newPieces };
+        }),
+        colonizePlanet: assign(({ context, event }) => {
+            if (event.type !== 'COLONIZE_PLANET') return {};
+            const { playerId, resourceType = 'Matter' } = event;
+            const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
+            const piece = context.pieces.find(p => p.playerId === playerId);
+            if (genomeIndex === -1 || !piece) return {};
+            const hex = context.hexGrid.find(h => h.id === piece.hexId);
+            if (!hex || hex.type === 'Void' || hex.type === 'HomeNebula') return {};
+            const genome = context.genomes[genomeIndex];
+            const roll = Math.floor(Math.random() * 6) + 1;
+            const interference = roll <= 2 ? -1 : (roll >= 5 ? 1 : 0);
+            const attributeSum = calculateFitness(genome, hex);
+            const totalScore = attributeSum + interference;
+            const success = totalScore >= hex.threshold;
+            const newGenomes = [...context.genomes];
+            if (success) {
+                newGenomes[genomeIndex] = {
+                    ...genome,
+                    rawMatter: resourceType === 'Matter' ? genome.rawMatter + hex.resourceYield : genome.rawMatter,
+                    dataClusters: resourceType === 'Data' ? genome.dataClusters + hex.resourceYield : genome.dataClusters,
+                };
+            } else {
+                newGenomes[genomeIndex] = {
+                    ...genome,
+                    insightTokens: genome.insightTokens + 1,
+                };
+            }
+            return {
+                genomes: newGenomes,
+                lastHarvestRoll: roll,
+                lastHarvestSuccess: success
+            };
+        }),
+        drawEnvironmentalEvent: assign(({ context }) => {
+            const event = context.eventDeck[0];
+            const newDeck = context.eventDeck.slice(1);
+            return {
+                currentEvent: event || null,
+                eventDeck: newDeck.length > 0 ? newDeck : [...INITIAL_EVENT_DECK],
+            };
+        }),
+        evaluateEnvironmentalFitness: assign(({ context }) => {
+            if (!context.currentEvent) return {};
+            const newGenomes = context.genomes.map(genome => {
+                const fitness = calculateFitness(genome, context.currentEvent);
+                if (fitness < context.currentEvent!.threshold) {
+                    const penalty = typeof context.currentEvent!.penalty === 'number'
+                        ? context.currentEvent!.penalty
+                        : context.currentEvent!.penalty.amount;
+                    return {
+                        ...genome,
+                        stability: Math.max(0, genome.stability - penalty),
+                        insightTokens: genome.insightTokens + 1,
+                    };
+                }
+                return genome;
+            });
+            return { genomes: newGenomes };
+        }),
+        resolveHustle: assign(({ context, event }) => {
+            if (event.type !== 'HUSTLE') return {};
+            const { attackerId, defenderId } = event;
+            const attackerGenome = context.genomes.find(g => g.playerId === attackerId);
+            const defenderGenome = context.genomes.find(g => g.playerId === defenderId);
+            if (!attackerGenome || !defenderGenome) return {};
+
+            // Power comparison: Use average attribute level
+            const attackerPower = Object.values(attackerGenome.baseAttributes).reduce((a, b) => a + b, 0);
+            const defenderPower = Object.values(defenderGenome.baseAttributes).reduce((a, b) => a + b, 0);
+
+            const newGenomes = context.genomes.map(genome => {
+                if (genome.playerId === attackerId && attackerPower > defenderPower) {
+                    return { ...genome, dataClusters: genome.dataClusters + 1 };
+                }
+                if (genome.playerId === defenderId && defenderPower > attackerPower) {
+                    return { ...genome, dataClusters: genome.dataClusters + 1 };
+                }
+                return genome;
+            });
+            return { genomes: newGenomes };
+        }),
+        incrementRound: assign(({ context }) => ({
+            round: context.round + 1,
+            currentPlayerIndex: 0,
+        })),
+        recordWinner: assign(({ context }) => {
+            const winnerIds = context.genomes.filter(checkWinCondition).map(g => g.playerId);
+            return { winners: winnerIds };
+        }),
+        resetGame: assign(({ context }) => ({
+            genomes: context.players.map(p => ({
+                playerId: p.id,
+                stability: 5,
+                dataClusters: 0,
+                rawMatter: 4,
+                insightTokens: 0,
+                lockedSlots: [],
+                baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
+                mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
+                cubePool: 12,
+            })),
+            pieces: context.players.map((p, i) => {
+                const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
+                return {
+                    playerId: p.id,
+                    hexId: starts[i % starts.length],
+                };
+            }),
+            eventDeck: [...INITIAL_EVENT_DECK],
+            currentEvent: null,
+            gamePhase: 'setup' as GamePhase,
+            round: 1,
+            winners: [],
+            currentPlayerIndex: 0,
+            lastMutationRoll: null,
+            lastHarvestRoll: null,
+            lastHarvestSuccess: null,
+        })),
+    },
+    guards: {
+        checkWin: ({ context }) => {
+            return context.genomes.some(checkWinCondition);
+        },
+    },
+});
