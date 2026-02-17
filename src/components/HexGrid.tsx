@@ -1,6 +1,4 @@
-import React from 'react';
 import { HexCell, PlayerPiece, HexType, AttributeType } from '../types';
-import { Box, Database } from 'lucide-react';
 
 // Hex grid initialization (37-Hex Tiered Galaxy)
 export const createHexGrid = (): HexCell[] => {
@@ -222,16 +220,38 @@ const HexGrid: React.FC<HexGridProps> = ({ hexGrid, pieces, playerColors, onHexC
                             {!isHome && (
                                 <text
                                     x={posX}
-                                    y={posY - 25}
+                                    y={posY - 28}
                                     textAnchor="middle"
-                                    style={{ fill: isSingularity ? color : color }}
+                                    style={{ fill: color }}
                                     className="text-[8px] font-black uppercase tracking-widest pointer-events-none select-none"
                                 >
-                                    {hex.type.replace(/([A-Z])/g, ' $1').trim()}
+                                    {hex.type.split(/(?=[A-Z])/).map((word, idx) => (
+                                        <tspan key={idx} x={posX} dy={idx === 0 ? 0 : 8}>
+                                            {word}
+                                        </tspan>
+                                    ))}
                                 </text>
                             )}
 
-                            {/* Threshold, Attribute & Resources */}
+                            {/* Resource Icons (Vertically Centered on Sides) */}
+                            {!isHome && (
+                                <g transform={`translate(${posX}, ${posY})`}>
+                                    {hex.yield.matter > 0 && (
+                                        <g transform="translate(-32, 0)">
+                                            <rect x="-8" y="-8" width="16" height="16" rx="2" className="fill-amber-500/80" />
+                                            <text x="0" y="2" textAnchor="middle" className="text-[12px] font-black fill-slate-900 pointer-events-none select-none">{hex.yield.matter}</text>
+                                        </g>
+                                    )}
+                                    {hex.yield.data > 0 && (
+                                        <g transform="translate(32, 0)">
+                                            <circle r="8" className="fill-cyan-500/80" />
+                                            <text x="0" y="2" textAnchor="middle" className="text-[12px] font-black fill-slate-900 pointer-events-none select-none">{hex.yield.data}</text>
+                                        </g>
+                                    )}
+                                </g>
+                            )}
+
+                            {/* Threshold & Attribute (Lower Area) */}
                             {!isHome && (
                                 <g transform={`translate(${posX}, ${posY + 18})`}>
                                     <text
@@ -253,22 +273,6 @@ const HexGrid: React.FC<HexGridProps> = ({ hexGrid, pieces, playerColors, onHexC
                                             ? hex.targetAttribute.join('·')
                                             : hex.targetAttribute}
                                     </text>
-
-                                    {/* Resource Icons */}
-                                    <g transform="translate(0, 22)">
-                                        {hex.yield.matter > 0 && (
-                                            <g transform={hex.yield.data > 0 ? "translate(-8, 0)" : "translate(0, 0)"}>
-                                                <rect x="-4" y="-4" width="8" height="8" rx="1" className="fill-amber-500/80" />
-                                                <text x="0" y="1" textAnchor="middle" className="text-[6px] font-black fill-slate-900 pointer-events-none select-none">{hex.yield.matter}</text>
-                                            </g>
-                                        )}
-                                        {hex.yield.data > 0 && (
-                                            <g transform={hex.yield.matter > 0 ? "translate(8, 0)" : "translate(0, 0)"}>
-                                                <circle r="4" className="fill-cyan-500/80" />
-                                                <text x="0" y="1" textAnchor="middle" className="text-[6px] font-black fill-slate-900 pointer-events-none select-none">{hex.yield.data}</text>
-                                            </g>
-                                        )}
-                                    </g>
                                 </g>
                             )}
 
