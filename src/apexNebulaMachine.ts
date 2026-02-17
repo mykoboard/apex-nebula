@@ -27,6 +27,7 @@ export const apexNebulaMachine = createMachine({
         gamePhase: 'setup' as GamePhase,
         round: 1,
         isInitiator: input?.isInitiator ?? false,
+        readyPlayers: input?.readyPlayers ?? [],
         winners: [],
         lastMutationRoll: null,
         lastHarvestRoll: null,
@@ -34,7 +35,11 @@ export const apexNebulaMachine = createMachine({
     }),
     states: {
         waitingForPlayers: {
+            entry: () => console.log('Machine State: waitingForPlayers'),
             on: {
+                START_GAME: {
+                    target: 'setupPhase',
+                },
                 SYNC_STATE: {
                     target: 'setupPhase',
                     actions: 'syncState',
@@ -42,19 +47,31 @@ export const apexNebulaMachine = createMachine({
             },
         },
         setupPhase: {
-            entry: assign({ gamePhase: 'setup' }),
+            entry: [
+                assign({ gamePhase: 'setup' }),
+                () => console.log('Machine State: setupPhase')
+            ],
             on: {
                 DISTRIBUTE_CUBES: {
                     actions: 'distributeCubes',
                 },
-                FINALIZE_SETUP: {
-                    target: 'mutationPhase',
-                    actions: 'finalizeSetup',
-                },
+                FINALIZE_SETUP: [
+                    {
+                        target: 'mutationPhase',
+                        guard: 'allPlayersReady',
+                        actions: 'finalizeSetup',
+                    },
+                    {
+                        actions: 'finalizeSetup',
+                    }
+                ],
             },
         },
         mutationPhase: {
-            entry: assign({ gamePhase: 'mutation' }),
+            entry: [
+                assign({ gamePhase: 'mutation' }),
+                () => console.log('Machine State: mutationPhase')
+            ],
             on: {
                 NEXT_PHASE: {
                     target: 'phenotypePhase',
@@ -62,7 +79,10 @@ export const apexNebulaMachine = createMachine({
             },
         },
         phenotypePhase: {
-            entry: assign({ gamePhase: 'phenotype' }),
+            entry: [
+                assign({ gamePhase: 'phenotype' }),
+                () => console.log('Machine State: phenotypePhase')
+            ],
             on: {
                 MOVE_PLAYER: {
                     actions: 'movePlayer',
@@ -156,7 +176,12 @@ export const apexNebulaMachine = createMachine({
             const genome = context.genomes[genomeIndex];
             const currentCubes = genome.baseAttributes[attribute];
             const newCubes = currentCubes + amount;
+
+            // Enforce limits
             if (newCubes < 1 || newCubes > 10) return {};
+            if (context.gamePhase === 'setup' && newCubes > 6) return {};
+
+            // Check cube pool
             if (genome.cubePool - amount < 0 && amount > 0) return {};
             const newGenomes = [...context.genomes];
             newGenomes[genomeIndex] = {
@@ -169,9 +194,12 @@ export const apexNebulaMachine = createMachine({
             };
             return { genomes: newGenomes };
         }),
-        finalizeSetup: assign(({ event }) => {
+        finalizeSetup: assign(({ context, event }) => {
             if (event.type !== 'FINALIZE_SETUP') return {};
-            return { gamePhase: 'mutation' as GamePhase };
+            if (context.readyPlayers.includes(event.playerId)) return {};
+            return {
+                readyPlayers: [...context.readyPlayers, event.playerId]
+            };
         }),
         movePlayer: assign(({ context, event }) => {
             if (event.type !== 'MOVE_PLAYER') return {};
@@ -283,6 +311,7 @@ export const apexNebulaMachine = createMachine({
                 mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
                 cubePool: 12,
             })),
+            readyPlayers: [],
             pieces: context.players.map((p, i) => {
                 const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
                 return {
@@ -302,6 +331,9 @@ export const apexNebulaMachine = createMachine({
         })),
     },
     guards: {
+        allPlayersReady: ({ context }) => {
+            return context.readyPlayers.length >= context.players.length;
+        },
         checkWin: ({ context }) => {
             return context.genomes.some(checkWinCondition);
         },

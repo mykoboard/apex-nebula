@@ -68,6 +68,7 @@ export interface ApexNebulaContext {
     gamePhase: GamePhase;
     round: number;
     isInitiator: boolean;
+    readyPlayers: string[];
     ledger?: LedgerEntry[];
     winners: string[];
     lastMutationRoll: number | null;
@@ -84,4 +85,5 @@ export type ApexNebulaEvent =
     | { type: 'COLONIZE_PLANET'; playerId: string; resourceType?: 'Matter' | 'Data' }
     | { type: 'HUSTLE'; attackerId: string; defenderId: string; category: string }
     | { type: 'NEXT_PHASE' }
+    | { type: 'START_GAME' }
     | { type: 'RESET' };

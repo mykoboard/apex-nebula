@@ -40,12 +40,13 @@ const ApexNebula: React.FC<GameProps> = ({
 
     const [state, send] = useMachine(apexNebulaMachine, {
         input: {
+            // ... existing input props
             players,
             genomes: players.map(p => ({
                 playerId: p.id,
                 stability: 5,
                 dataClusters: 0,
-                rawMatter: 4,
+                rawMatter: 0,
                 insightTokens: 0,
                 lockedSlots: [],
                 baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
@@ -61,8 +62,11 @@ const ApexNebula: React.FC<GameProps> = ({
             }),
             isInitiator,
             ledger,
+            readyPlayers: [],
         },
     });
+
+
 
     const localPlayer = playerInfos.find(p => p.isLocal);
     const localGenome = state.context.genomes.find(g => g.playerId === localPlayer?.id);
@@ -70,12 +74,24 @@ const ApexNebula: React.FC<GameProps> = ({
     const isLocalPlayerTurn = currentPlayer?.id === localPlayer?.id;
     const otherPlayers = playerInfos.filter(p => !p.isLocal);
 
+    // Debugging state changes
+    useEffect(() => {
+        console.log('--- UI Render State ---');
+        console.log('Current Phase:', state.value);
+        console.log('Editable (setupPhase?):', state.matches('setupPhase'));
+        console.log('Cube Pool:', localGenome?.cubePool);
+    }, [state.value, localGenome?.cubePool]);
+
     // WebRTC message handling
     useEffect(() => {
         const handleMessage = (data: string) => {
             try {
                 const message = JSON.parse(data);
+                console.log('Raw Message:', message);
+                console.log('isGameMessage check:', isGameMessage(message));
+
                 if (isGameMessage(message)) {
+                    console.log('Sending event to machine:', message.type, message.payload);
                     send({ type: message.type as any, ...message.payload });
                 }
             } catch (error) {
@@ -107,6 +123,12 @@ const ApexNebula: React.FC<GameProps> = ({
     // Add to ledger on significant actions
     const handleAction = (actionType: string, payload: any) => {
         send({ type: actionType as any, ...payload });
+
+        // During setup, cube distribution is local only
+        if (state.matches('setupPhase') && actionType === 'DISTRIBUTE_CUBES') {
+            return;
+        }
+
         onAddLedger({ type: actionType, payload });
     };
 
@@ -232,13 +254,14 @@ const ApexNebula: React.FC<GameProps> = ({
                     {/* Left: Genome Matrix & Other Players */}
                     <div className="xl:col-span-8 space-y-12">
                         <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-indigo-500">
-                                Genome Console (Attributes & Resources)
+                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-indigo-500 uppercase">
+                                Genome Console
                             </h4>
                             {localGenome && (
                                 <PlayerConsole
                                     genome={localGenome}
                                     editable={state.matches('setupPhase')}
+                                    setupLimit={state.matches('setupPhase') ? 6 : undefined}
                                     onDistribute={(attr, amt) => handleAction('DISTRIBUTE_CUBES', { playerId: localPlayer?.id, attribute: attr, amount: amt })}
                                 />
                             )}
@@ -250,10 +273,17 @@ const ApexNebula: React.FC<GameProps> = ({
                                 .filter(g => g.playerId !== localPlayer?.id)
                                 .map(genome => {
                                     const player = state.context.players.find(p => p.id === genome.playerId);
-                                    if (!player) return null;
+                                    const isReady = state.context.readyPlayers.includes(genome.playerId);
                                     return (
                                         <div key={genome.playerId} className="space-y-4">
-                                            <div className="text-[10px] font-bold text-slate-500 uppercase">{player.name}'s Systems</div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-[10px] font-bold text-slate-500 uppercase">{player.name}'s Systems</div>
+                                                {isReady && (
+                                                    <div className="px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded text-[8px] font-black text-green-400 uppercase tracking-widest animate-pulse">
+                                                        Ready
+                                                    </div>
+                                                )}
+                                            </div>
                                             <PlayerConsole genome={genome} />
                                         </div>
                                     );
@@ -291,7 +321,25 @@ const ApexNebula: React.FC<GameProps> = ({
                                     <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest px-3 py-1 bg-purple-500/10 rounded-full ring-1 ring-purple-500/30">
                                         Phase: {state.context.gamePhase}
                                     </div>
-                                </div >
+                                </div>
+
+                                {state.matches('setupPhase') && (
+                                    <div className="space-y-4">
+                                        <p className="text-xs text-slate-400 leading-relaxed italic">
+                                            Distribute your 12 attribute cubes. Your current genome requires {16 /* This is static for now based on user rules but should be dynamic if we add more complex logic */} points.
+                                        </p>
+                                        <Button
+                                            onClick={() => handleAction('FINALIZE_SETUP', { playerId: localPlayer?.id })}
+                                            disabled={state.context.readyPlayers.includes(localPlayer?.id || '')}
+                                            className={`w-full h-12 uppercase font-black tracking-widest text-xs rounded-2xl transition-all shadow-lg ${state.context.readyPlayers.includes(localPlayer?.id || '')
+                                                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
+                                                }`}
+                                        >
+                                            {state.context.readyPlayers.includes(localPlayer?.id || '') ? 'Waiting for Others...' : 'Finalize Build'}
+                                        </Button>
+                                    </div>
+                                )}
 
                                 <div className="flex flex-col gap-4">
                                     {state.matches('setupPhase') && isLocalPlayerTurn && (
