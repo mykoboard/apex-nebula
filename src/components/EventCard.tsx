@@ -1,5 +1,6 @@
 import React from 'react';
-import { EnvironmentalEvent } from '../apexNebulaMachine';
+import { EnvironmentalEvent } from '../types';
+
 import { AlertTriangle } from 'lucide-react';
 
 interface EventCardProps {
@@ -43,8 +44,9 @@ const EventCard: React.FC<EventCardProps> = ({ event }) => {
                 </div>
             </div>
             <div className="mt-3 text-xs bg-red-900/20 text-red-400 rounded-xl p-3 border border-red-500/20">
-                <strong className="font-black uppercase tracking-wider">Penalty:</strong> -{event.penalty} Stability on failure
+                <strong className="font-black uppercase tracking-wider">Penalty:</strong> -{typeof event.penalty === 'number' ? event.penalty : event.penalty.amount} Stability on failure
             </div>
+
         </div>
     );
 };

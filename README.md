@@ -103,41 +103,39 @@ To prevent "Overfitting" (having stats that are too expensive to keep), players 
 
 ## 🗺️ 7. Hex Sector Definitions
 
-| Tier | Tiles | Threshold | Yield |
-| --- | --- | --- | --- |
-| **1 (Outer)** | 18 | 2 | 1 Matter or 1 Data |
-| **2 (Middle)** | 12 | 4 | 2 Matter or 2 Data |
-| **3 (Inner)** | 6 | 6 | 4 Matter or 4 Data |
-| **The Core** | 1 | 8 | **The Singularity** |
-
+|Tier |Total Tiles|Threshold|Standard Yield|Hybrid Yield (Double Check)|
+| --- | --- | --- | --- | --- |
+|T1 (Outer)|18 |2|1 Matter or 1 Data|1 Matter and 1 Data|
+|T2 (Middle)|12|4|2 Matter or 2 Data|2 Matter and 2 Data|
+|T3 (Inner)|6|6|4 Matter or 4 Data|4 Matter and 4 Data|
+|The Core|1|8|The Singularity|N/A|
 
 Here is how the stats are distributed across the 37 hexes to ensure a balanced "Search Space."
 There are void tailes with no yield and treshold.
 
-### 🟢 Tier 1: The Stable Rim (Threshold 2)
+Certainly! I've updated the manifest to include a **Quantity** column for each tier. This makes it a one-stop reference for both manufacturing the set and setting up the board.
 
-* **Asteroid Scrap (DEF x 3):** Physical debris requires structural integrity.
-* **Signal Pings (SCN x 3):** Faint data traces require basic sensor tuning.
-* **Gravity Eddies (NAV x 3):** Minor spatial warping requires basic engine control.
-* **Legacy Code (LOG x 3):** Ancient encrypted fragments require basic logic processing.
-* **Void (x 6):** Empty space with trasold 1 but no yield.
+### 🌌 Apex Nebula: Master Tile Manifest
 
-### 🟡 Tier 2: The Turbulent Belt (Threshold 4)
-
-* **Solar Flares (DEF x 2):** High radiation zones that melt unoptimized hulls.
-* **Encrypted Relays (LOG x 2):** Complex data nodes that require high-level hacking.
-* **Ion Clouds (NAV x 2):** Thick gas that makes movement difficult without advanced navigation.
-* **Deep Space Buoys (SCN x 2) :** Precision sensor targets hidden in the dark.
-* **Void (x 4):** Empty space with threshold 3 but no yield.
-
-### 🔴 Tier 3: The Event Horizon (Threshold 6)
-
-* **Supernova Remnants (DEF/NAV x 1):** Extreme heat and kinetic shock. Requires both structure and speed to survive.
-* **Omega Archives (LOG/SCN x 1):** The ultimate data vaults. Requires massive processing and precision scanning.
-* **Black Holes (NAV/DEF x 1) :** The ultimate gravity test. If your NAV isn't high enough to escape the pull, your DEF must be high enough to survive the crush.
-* **Void (x 2):** Empty space with threshold 5 but no yield.
-
-Void tiles trashold only counts in the event deck.
+| Tier | Tile Name | Attribute Check | Threshold | Yield (Resources) | Type | Qty |
+| --- | --- | --- | --- | --- | --- | --- |
+| **T1** | **Scrap Heap** | **DEF** | 2 | 1 Matter | Standard | **3** |
+| **T1** | **Signal Ping** | **SCN** | 2 | 1 Data | Standard | **3** |
+| **T1** | **Gravity Eddy** | **NAV** | 2 | 1 Matter | Standard | **3** |
+| **T1** | **Logic Fragment** | **LOG** | 2 | 1 Data | Standard | **3** |
+| **T1** | **Data Cluster** | **LOG** | 2 | 1 Matter **AND** 1 Data | **Hybrid** | **6** |
+| **T2** | **Solar Flare** | **DEF** | 4 | 2 Matter | Standard | **2** |
+| **T2** | **Deep Buoy** | **SCN** | 4 | 2 Data | Standard | **2** |
+| **T2** | **Ion Cloud** | **NAV** | 4 | 2 Matter | Standard | **2** |
+| **T2** | **System Cache** | **LOG** | 4 | 2 Data | Standard | **2** |
+| **T2** | **Encrypted Relay** | **LOG / NAV** | 4 | 2 Matter **AND** 2 Data | **Hybrid** | **4** |
+| **T3** | **Supernova** | **DEF** | 6 | 4 Matter | Standard | **1** |
+| **T3** | **Pulsar Archive** | **SCN** | 6 | 4 Data | Standard | **1** |
+| **T3** | **Gravity Well** | **NAV** | 6 | 4 Matter | Standard | **1** |
+| **T3** | **Core Database** | **LOG** | 6 | 4 Data | Standard | **1** |
+| **T3** | **Singularity Shard** | **ALL** | 6 | 4 Matter **AND** 4 Data | **Hybrid** | **2** |
+| **Core** | **The Singularity** | **LOG + SCN** | 8 | **WIN CONDITION** | **Unique** | **1** |
+| **Total** |  |  |  |  |  | **37** |
 
 ---
 

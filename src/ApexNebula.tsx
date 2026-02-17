@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo } from 'react';
 import { useMachine } from '@xstate/react';
 import { GameProps, createGameMessage, isGameMessage } from '@mykoboard/integration';
-import { apexNebulaMachine, Color, Player } from './apexNebulaMachine';
+import { apexNebulaMachine } from './apexNebulaMachine';
+import { Color, Player } from './types';
+
 import HexGrid from './components/HexGrid';
 import PlayerConsole from './components/PlayerConsole';
 import EventCard from './components/EventCard';
+import EventDeck from './components/EventDeck';
 import PhaseIndicator from './components/PhaseIndicator';
+
 import { Dna, Dice6, ArrowRight, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -263,9 +267,14 @@ const ApexNebula: React.FC<GameProps> = ({
                         <div className="space-y-6">
                             <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-2">
                                 <div className="w-1 h-3 bg-orange-500 rounded-full" />
-                                Environmental Event
+                                Event Deck & Protocol
                             </h3>
                             <EventCard event={state.context.currentEvent} />
+                            <EventDeck
+                                deck={state.context.eventDeck}
+                                discard={[]} // Discard state calculation could be added to machine context if needed
+                            />
+
                         </div>
 
                         {/* Action Panel */}

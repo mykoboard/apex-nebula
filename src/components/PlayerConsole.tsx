@@ -1,5 +1,6 @@
 import React from 'react';
-import { AttributeType, PlayerGenome } from '../apexNebulaMachine';
+import { AttributeType, PlayerGenome } from '../types';
+
 import { Database, Zap, Shield, Cpu, Box, HardDrive, Heart } from 'lucide-react';
 
 interface PlayerConsoleProps {

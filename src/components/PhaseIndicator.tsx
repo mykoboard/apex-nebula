@@ -1,5 +1,6 @@
 import React from 'react';
-import { GamePhase } from '../apexNebulaMachine';
+import { GamePhase } from '../types';
+
 import { Dna, Navigation, CloudLightning, Swords, Settings } from 'lucide-react';
 
 interface PhaseIndicatorProps {
