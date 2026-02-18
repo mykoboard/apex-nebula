@@ -50,7 +50,8 @@ const StandaloneApexNebula: React.FC = () => {
                 </div>
                 <button
                     onClick={() => {
-                        const message = { namespace: 'game', type: 'START_GAME', payload: {}, senderId: 'debug' };
+                        const seed = Math.floor(Math.random() * 1000000);
+                        const message = { namespace: 'game', type: 'START_GAME', payload: { seed }, senderId: 'debug' };
                         (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
                     }}
                     className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors"
@@ -59,12 +60,54 @@ const StandaloneApexNebula: React.FC = () => {
                 </button>
                 <button
                     onClick={() => {
-                        const message = { namespace: 'game', type: 'FINALIZE_SETUP', payload: { playerId: 'player2' }, senderId: 'debug' };
-                        (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
+                        // Deterministic randomization for mock Beta AI
+                        const dist = [1, 1, 1, 1];
+                        let remaining = 12;
+                        while (remaining > 0) {
+                            const idx = Math.floor(Math.random() * 4);
+                            if (dist[idx] < 6) {
+                                dist[idx]++;
+                                remaining--;
+                            }
+                        }
+                        const attrs = ['NAV', 'LOG', 'DEF', 'SCN'];
+                        attrs.forEach((attr, i) => {
+                            if (dist[i] > 1) { // Only send if we added something
+                                const message = {
+                                    namespace: 'game',
+                                    type: 'DISTRIBUTE_CUBES',
+                                    payload: {
+                                        playerId: 'player2',
+                                        attribute: attr,
+                                        amount: dist[i] - 1
+                                    },
+                                    senderId: 'debug'
+                                };
+                                (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
+                            }
+                        });
                     }}
                     className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors"
                 >
-                    Simulate Beta AI Ready
+                    Force Beta AI Distribution
+                </button>
+                <button
+                    onClick={() => {
+                        const message = { namespace: 'game', type: 'INITIATE_MUTATION', payload: {}, senderId: 'debug' };
+                        (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
+                    }}
+                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors"
+                >
+                    Simulate Beta AI Mutation
+                </button>
+                <button
+                    onClick={() => {
+                        const message = { namespace: 'game', type: 'CONFIRM_PHASE', payload: { playerId: 'player2' }, senderId: 'debug' };
+                        (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
+                    }}
+                    className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors"
+                >
+                    Simulate Beta AI Confirm
                 </button>
             </div>
 

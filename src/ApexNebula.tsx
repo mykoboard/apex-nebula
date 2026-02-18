@@ -10,7 +10,7 @@ import EventCard from './components/EventCard';
 import EventDeck from './components/EventDeck';
 import PhaseIndicator from './components/PhaseIndicator';
 
-import { Dna, Dice6, ArrowRight, Trophy } from 'lucide-react';
+import { Dna, Dice6, Trophy, Zap, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const COLORS: Color[] = ['red', 'green', 'blue', 'yellow'];
@@ -80,7 +80,8 @@ const ApexNebula: React.FC<GameProps> = ({
         console.log('Current Phase:', state.value);
         console.log('Editable (setupPhase?):', state.matches('setupPhase'));
         console.log('Cube Pool:', localGenome?.cubePool);
-    }, [state.value, localGenome?.cubePool]);
+        console.log('Shared Seed:', state.context.seed);
+    }, [state.value, localGenome?.cubePool, state.context.seed]);
 
     // WebRTC message handling
     useEffect(() => {
@@ -124,19 +125,16 @@ const ApexNebula: React.FC<GameProps> = ({
     const handleAction = (actionType: string, payload: any) => {
         send({ type: actionType as any, ...payload });
 
-        // During setup, cube distribution is local only
+        // During setup, cube distribution is obfuscated (hide attribute)
         if (state.matches('setupPhase') && actionType === 'DISTRIBUTE_CUBES') {
+            const { playerId, amount } = payload;
+            onAddLedger({ type: actionType, payload: { playerId, amount } });
             return;
         }
 
         onAddLedger({ type: actionType, payload });
     };
 
-    const handleRollMutation = () => {
-        if (!localPlayer) return;
-        const roll = Math.floor(Math.random() * 6) + 1;
-        handleAction('ROLL_MUTATION', { playerId: localPlayer.id, value: roll });
-    };
 
     const handleMoveToHex = (hexId: string) => {
         if (!localPlayer || !isLocalPlayerTurn) return;
@@ -148,9 +146,6 @@ const ApexNebula: React.FC<GameProps> = ({
         handleAction('COLONIZE_PLANET', { playerId: localPlayer.id, resourceType });
     };
 
-    const handleNextPhase = () => {
-        handleAction('NEXT_PHASE', {});
-    };
 
     const handleReset = () => {
         handleAction('RESET', {});
@@ -254,8 +249,11 @@ const ApexNebula: React.FC<GameProps> = ({
                     {/* Left: Genome Matrix & Other Players */}
                     <div className="xl:col-span-8 space-y-12">
                         <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-indigo-500 uppercase">
+                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-indigo-500 uppercase flex items-center gap-2">
                                 Genome Console
+                                {state.context.priorityPlayerId === localPlayer?.id && (
+                                    <Crown className="w-3 h-3 text-yellow-500" />
+                                )}
                             </h4>
                             {localGenome && (
                                 <PlayerConsole
@@ -273,11 +271,17 @@ const ApexNebula: React.FC<GameProps> = ({
                                 .filter(g => g.playerId !== localPlayer?.id)
                                 .map(genome => {
                                     const player = state.context.players.find(p => p.id === genome.playerId);
-                                    const isReady = state.context.readyPlayers.includes(genome.playerId);
+                                    if (!player) return null;
+                                    const isReady = genome.cubePool === 0;
                                     return (
                                         <div key={genome.playerId} className="space-y-4">
                                             <div className="flex items-center justify-between">
-                                                <div className="text-[10px] font-bold text-slate-500 uppercase">{player.name}'s Systems</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="text-[10px] font-bold text-slate-500 uppercase">{player.name}'s Systems</div>
+                                                    {state.context.priorityPlayerId === player.id && (
+                                                        <Crown className="w-3 h-3 text-yellow-500" />
+                                                    )}
+                                                </div>
                                                 {isReady && (
                                                     <div className="px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded text-[8px] font-black text-green-400 uppercase tracking-widest animate-pulse">
                                                         Ready
@@ -285,6 +289,14 @@ const ApexNebula: React.FC<GameProps> = ({
                                                 )}
                                             </div>
                                             <PlayerConsole genome={genome} />
+                                            {state.matches('mutationPhase') && state.context.turnOrder[state.context.currentPlayerIndex] === genome.playerId && !state.context.mutationResults[genome.playerId] && (
+                                                <Button
+                                                    onClick={() => handleAction('INITIATE_MUTATION', {})}
+                                                    className="w-full mt-2 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 text-[10px] h-8 uppercase font-black tracking-widest"
+                                                >
+                                                    Simulate {player.name} Mutation
+                                                </Button>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -324,50 +336,94 @@ const ApexNebula: React.FC<GameProps> = ({
                                 </div>
 
                                 {state.matches('setupPhase') && (
-                                    <div className="space-y-4">
-                                        <p className="text-xs text-slate-400 leading-relaxed italic">
-                                            Distribute your 12 attribute cubes. Your current genome requires {16 /* This is static for now based on user rules but should be dynamic if we add more complex logic */} points.
-                                        </p>
-                                        <Button
-                                            onClick={() => handleAction('FINALIZE_SETUP', { playerId: localPlayer?.id })}
-                                            disabled={state.context.readyPlayers.includes(localPlayer?.id || '')}
-                                            className={`w-full h-12 uppercase font-black tracking-widest text-xs rounded-2xl transition-all shadow-lg ${state.context.readyPlayers.includes(localPlayer?.id || '')
-                                                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                                                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
-                                                }`}
-                                        >
-                                            {state.context.readyPlayers.includes(localPlayer?.id || '') ? 'Waiting for Others...' : 'Finalize Build'}
-                                        </Button>
+                                    <p className="text-xs text-slate-400 leading-relaxed italic">
+                                        Distribute your 12 attribute cubes to initialize your genome's base configuration.
+                                    </p>
+                                )}
+
+                                {state.matches('mutationPhase') && (
+                                    <div className="space-y-6">
+                                        <h5 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                                            <Zap className="w-3 h-3" />
+                                            Stochastic Mutation Phase
+                                        </h5>
+
+                                        {Object.keys(state.context.mutationResults).length < state.context.players.length ? (
+                                            <div className="space-y-4">
+                                                <p className="text-xs text-slate-400 leading-relaxed italic">
+                                                    Systems are entering the nebula's high-radiation zone. {state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'It is your turn to initiate.' : `Awaiting ${state.context.players.find(p => p.id === state.context.turnOrder[state.context.currentPlayerIndex])?.name}...`}
+                                                </p>
+                                                <Button
+                                                    onClick={() => handleAction('INITIATE_MUTATION', {})}
+                                                    disabled={state.context.turnOrder[state.context.currentPlayerIndex] !== localPlayer?.id}
+                                                    className={`w-full h-12 uppercase font-black tracking-widest text-xs rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg ${state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id
+                                                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
+                                                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                                        }`}
+                                                >
+                                                    <Dice6 className="w-4 h-4" />
+                                                    {state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'Initiate Mutation' : 'Awaiting Turn...'}
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="space-y-4">
+                                                    {state.context.players.map(p => {
+                                                        const res = state.context.mutationResults[p.id];
+                                                        if (!res) return null;
+                                                        return (
+                                                            <div key={p.id} className="bg-slate-900/50 p-3 rounded-xl border border-white/5 space-y-2">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{p.name}</span>
+                                                                    <div className="flex gap-1.5">
+                                                                        <div className="w-6 h-6 flex items-center justify-center bg-indigo-500/20 rounded border border-indigo-500/30 text-[10px] font-black text-indigo-400" title={`Attribute Roll: ${res.attrRoll}`}>
+                                                                            {res.attrRoll}
+                                                                        </div>
+                                                                        <div className="w-6 h-6 flex items-center justify-center bg-purple-500/20 rounded border border-purple-500/30 text-[10px] font-black text-purple-400" title={`Magnitude Roll: ${res.magRoll}`}>
+                                                                            {res.magRoll}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`text-xs font-black uppercase tracking-widest ${res.magnitude > 0 ? 'text-green-400' : res.magnitude < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                                                                        {res.attr}: {res.magnitude > 0 ? '+' : ''}{res.magnitude}
+                                                                    </div>
+                                                                    <div className="h-[1px] flex-1 bg-white/5" />
+                                                                    <span className="text-[8px] font-black text-slate-600 uppercase">Applied</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <Button
+                                                    onClick={() => handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })}
+                                                    disabled={state.context.confirmedPlayers.includes(localPlayer?.id || '')}
+                                                    className={`w-full uppercase font-black tracking-widest text-[10px] h-10 rounded-xl transition-all ${state.context.confirmedPlayers.includes(localPlayer?.id || '')
+                                                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                                        : 'bg-indigo-600 hover:bg-slate-700 text-white shadow-lg'
+                                                        }`}
+                                                >
+                                                    {state.context.confirmedPlayers.includes(localPlayer?.id || '') ? 'Awaiting System Confirmation...' : 'Confirm & Continue'}
+                                                </Button>
+                                            </>
+                                        )}
                                     </div>
                                 )}
 
                                 <div className="flex flex-col gap-4">
                                     {state.matches('setupPhase') && isLocalPlayerTurn && (
-                                        <Button
-                                            onClick={() => send({ type: 'FINALIZE_SETUP', playerId: localPlayer!.id })}
-                                            disabled={localGenome?.cubePool !== 0}
-                                            className="h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white font-black text-xs uppercase tracking-widest shadow-lg transition-all"
-                                        >
-                                            Finalize Distribution {localGenome?.cubePool! > 0 ? `(${localGenome?.cubePool} Left)` : ''}
-                                        </Button>
+                                        <div className="p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-center space-y-2">
+                                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
+                                                {localGenome?.cubePool! > 0 ? 'Allocating Neural Cubes...' : 'Distribution Finalized'}
+                                            </p>
+                                            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
+                                                {localGenome?.cubePool! > 0
+                                                    ? `Place ${localGenome?.cubePool} more cubes to proceed.`
+                                                    : 'Awaiting other sectors to initialize...'}
+                                            </p>
+                                        </div>
                                     )}
 
-                                    {state.matches('mutationPhase') && isLocalPlayerTurn && (
-                                        <>
-                                            <Button
-                                                onClick={handleRollMutation}
-                                                className="w-full h-16 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-black text-sm uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(168,85,247,0.2)]"
-                                            >
-                                                <Dice6 className="w-5 h-5 mr-3" />
-                                                Initiate Mutation
-                                            </Button>
-                                            {state.context.lastMutationRoll && (
-                                                <div className="flex items-center justify-center p-4 bg-purple-500/10 rounded-2xl border border-purple-500/20">
-                                                    <span className="font-black text-purple-400 tracking-widest uppercase text-xs">Mutation Vector: {state.context.lastMutationRoll}</span>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
 
                                     {state.matches('phenotypePhase') && isLocalPlayerTurn && (
                                         <>
@@ -402,15 +458,6 @@ const ApexNebula: React.FC<GameProps> = ({
                                         </div>
                                     )}
 
-                                    {isInitiator && (
-                                        <Button
-                                            onClick={handleNextPhase}
-                                            className="w-full h-16 rounded-2xl bg-orange-600 hover:bg-orange-500 text-white font-black text-sm uppercase tracking-wider transition-all mt-4 border border-orange-400/20"
-                                        >
-                                            Proceed to Next Phase
-                                            <ArrowRight className="w-5 h-5 ml-3" />
-                                        </Button>
-                                    )}
                                 </div>
                             </div>
                         </div>

@@ -68,22 +68,28 @@ export interface ApexNebulaContext {
     gamePhase: GamePhase;
     round: number;
     isInitiator: boolean;
-    readyPlayers: string[];
+    seed?: number;
+    mutationResults: Record<string, { attr: AttributeType; magnitude: number; attrRoll: number; magRoll: number }>;
+    priorityPlayerId: string;
+    turnOrder: string[];
+    dataSpentThisRound: Record<string, number>;
     ledger?: LedgerEntry[];
     winners: string[];
     lastMutationRoll: number | null;
     lastHarvestRoll: number | null;
     lastHarvestSuccess: boolean | null;
+    confirmedPlayers: string[];
 }
 
 export type ApexNebulaEvent =
-    | { type: 'SYNC_STATE'; context: Partial<ApexNebulaContext> }
+    | { type: 'SYNC_STATE'; context: ApexNebulaContext; seed?: number }
     | { type: 'MOVE_PLAYER'; playerId: string; hexId: string }
     | { type: 'SPEND_INSIGHT'; playerId: string; amount: number }
     | { type: 'DISTRIBUTE_CUBES'; playerId: string; attribute: AttributeType; amount: number }
-    | { type: 'FINALIZE_SETUP'; playerId: string }
+    | { type: 'INITIATE_MUTATION' }
     | { type: 'COLONIZE_PLANET'; playerId: string; resourceType?: 'Matter' | 'Data' }
+    | { type: 'CONFIRM_PHASE'; playerId: string }
     | { type: 'HUSTLE'; attackerId: string; defenderId: string; category: string }
     | { type: 'NEXT_PHASE' }
-    | { type: 'START_GAME' }
+    | { type: 'START_GAME'; seed?: number }
     | { type: 'RESET' };

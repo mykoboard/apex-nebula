@@ -13,6 +13,22 @@ export const calculateFitness = (genome: PlayerGenome, target: { targetAttribute
     return totalStats;
 };
 
+// Helper: Seeded PRNG (Mulberry32)
+export const createPRNG = (seed: number) => {
+    return () => {
+        seed |= 0;
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) | 0;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+};
+
+// Helper: Seeded dice roll (1 to sides)
+export const rollSeededDice = (prng: () => number, sides: number): number => {
+    return Math.floor(prng() * sides) + 1;
+};
+
 // Helper: Check win condition (Gen 0: 30 Data Clusters)
 export const checkWinCondition = (genome: PlayerGenome): boolean => {
     return genome.dataClusters >= 30;
