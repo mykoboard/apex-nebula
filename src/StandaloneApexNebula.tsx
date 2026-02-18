@@ -109,6 +109,15 @@ const StandaloneApexNebula: React.FC = () => {
                 >
                     Simulate Beta AI Confirm
                 </button>
+                <button
+                    onClick={() => {
+                        const message = { namespace: 'game', type: 'FINISH_TURN', payload: { playerId: 'player2' }, senderId: 'debug' };
+                        (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
+                    }}
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors"
+                >
+                    Simulate Beta AI Finish Turn
+                </button>
             </div>
 
             <ApexNebula

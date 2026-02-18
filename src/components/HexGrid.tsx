@@ -1,9 +1,11 @@
 import { HexCell, PlayerPiece, HexType, AttributeType } from '../types';
+import { getHexDistance, shuffleSeeded, createPRNG } from '../utils';
 
 // Hex grid initialization (37-Hex Tiered Galaxy)
-export const createHexGrid = (): HexCell[] => {
+export const createHexGrid = (seed: number = 12345): HexCell[] => {
     const hexes: HexCell[] = [];
     const maxRadius = 4;
+    const prng = createPRNG(seed);
 
     const tier3Dist: HexType[] = [
         'Supernova', 'PulsarArchive', 'GravityWell', 'CoreDatabase',
@@ -24,13 +26,9 @@ export const createHexGrid = (): HexCell[] => {
         'DataCluster', 'DataCluster', 'DataCluster', 'DataCluster', 'DataCluster', 'DataCluster'
     ];
 
-    function shuffle<T>(array: T[]): T[] {
-        return [...array].sort(() => Math.random() - 0.5);
-    }
-
-    const s3 = shuffle(tier3Dist);
-    const s2 = shuffle(tier2Dist);
-    const s1 = shuffle(tier1Dist);
+    const s3 = shuffleSeeded(tier3Dist, prng);
+    const s2 = shuffleSeeded(tier2Dist, prng);
+    const s1 = shuffleSeeded(tier1Dist, prng);
 
     let i3 = 0, i2 = 0, i1 = 0;
 
@@ -153,9 +151,12 @@ interface HexGridProps {
     pieces: PlayerPiece[];
     playerColors: Record<string, string>;
     onHexClick: (id: string) => void;
+    currentHexId?: string;
+    maxDistance?: number;
 }
 
-const HexGrid: React.FC<HexGridProps> = ({ hexGrid, pieces, playerColors, onHexClick }) => {
+const HexGrid: React.FC<HexGridProps> = ({ hexGrid, pieces, playerColors, onHexClick, currentHexId, maxDistance }) => {
+    const currentHex = hexGrid.find(h => h.id === currentHexId);
     // Dynamic Hex Layout (CSS Grid based visualization)
     return (
         <div className="relative w-full aspect-square max-w-4xl mx-auto p-12 bg-slate-900/50 rounded-[3rem] border border-white/5 backdrop-blur-2xl shadow-2xl ring-1 ring-white/5 group overflow-hidden">
@@ -186,6 +187,13 @@ const HexGrid: React.FC<HexGridProps> = ({ hexGrid, pieces, playerColors, onHexC
                     const isHome = hex.type === 'HomeNebula';
                     const color = getHexColor(hex);
 
+                    // Range calculation
+                    const distance = (currentHex && maxDistance !== undefined)
+                        ? getHexDistance(currentHex.x, currentHex.y, hex.x, hex.y)
+                        : Infinity;
+                    const inRange = distance <= (maxDistance || 0);
+                    const isOccupiedByLocal = currentHexId === hex.id;
+
                     return (
                         <g
                             key={hex.id}
@@ -205,7 +213,8 @@ const HexGrid: React.FC<HexGridProps> = ({ hexGrid, pieces, playerColors, onHexC
                                 className={`transition-all duration-300 stroke-[1.5] group-hover/hex:stroke-[3.5]
                                     ${isSingularity ? 'opacity-100 shadow-[0_0_20px_rgba(129,140,248,0.5)]' :
                                         isHome ? 'opacity-40' :
-                                            'opacity-80 group-hover/hex:opacity-100'}`}
+                                            'opacity-80 group-hover/hex:opacity-100'}
+                                    ${inRange && !isOccupiedByLocal ? 'stroke-[4] stroke-white drop-shadow-[0_0_8px_white]' : ''}`}
                             />
 
                             {/* Hex Center Point & Labels */}

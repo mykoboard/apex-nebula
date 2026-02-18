@@ -7,7 +7,7 @@ import {
 } from './types';
 import { createHexGrid } from './components/HexGrid';
 import { INITIAL_EVENT_DECK } from './components/EventDeck';
-import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice } from './utils';
+import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance } from './utils';
 
 // XState machine
 export const apexNebulaMachine = createMachine({
@@ -22,7 +22,7 @@ export const apexNebulaMachine = createMachine({
         currentPlayerIndex: 0,
         genomes: input?.genomes ?? [],
         pieces: input?.pieces ?? [],
-        hexGrid: createHexGrid(),
+        hexGrid: createHexGrid(input?.seed || 12345),
         eventDeck: [...INITIAL_EVENT_DECK],
         currentEvent: null,
         gamePhase: 'setup' as GamePhase,
@@ -37,6 +37,8 @@ export const apexNebulaMachine = createMachine({
         lastMutationRoll: null,
         lastHarvestRoll: null,
         lastHarvestSuccess: null,
+        lastHarvestResults: [],
+        phenotypeActions: {},
         confirmedPlayers: [],
     }),
     states: {
@@ -101,22 +103,23 @@ export const apexNebulaMachine = createMachine({
         },
         phenotypePhase: {
             entry: [
-                assign({
-                    gamePhase: 'phenotype',
-                    confirmedPlayers: [] // Reset barrier
-                }),
+                assign({ gamePhase: 'phenotype', confirmedPlayers: [], currentPlayerIndex: 0 }),
                 () => console.log('Machine State: phenotypePhase')
             ],
             on: {
                 MOVE_PLAYER: {
-                    actions: 'movePlayer',
+                    actions: 'moveAndHarvest',
+                    guard: 'canMove',
                 },
-                COLONIZE_PLANET: {
-                    actions: 'colonizePlanet',
-                },
-                NEXT_PHASE: {
-                    target: 'environmentalPhase',
-                },
+                FINISH_TURN: [
+                    {
+                        target: 'environmentalPhase',
+                        guard: 'isLastPhenotypeTurn',
+                    },
+                    {
+                        actions: 'nextPhenotypePlayer',
+                    }
+                ],
             },
         },
         environmentalPhase: {
@@ -271,11 +274,10 @@ export const apexNebulaMachine = createMachine({
             if (genomeIndex === -1) return {};
             const genome = context.genomes[genomeIndex];
             if (genome.insightTokens < amount) return {};
-            const newGenomes = [...context.genomes];
-            newGenomes[genomeIndex] = {
-                ...genome,
-                insightTokens: genome.insightTokens - amount,
-            };
+
+            const newGenomes = context.genomes.map((g, idx) =>
+                idx === genomeIndex ? { ...g, insightTokens: g.insightTokens - amount } : g
+            );
             return { genomes: newGenomes };
         }),
 
@@ -289,11 +291,9 @@ export const apexNebulaMachine = createMachine({
             // If attribute is missing, it's an obfuscated update (just decrement pool)
             if (!attribute) {
                 if (genome.cubePool - amount < 0 && amount > 0) return {};
-                const newGenomes = [...context.genomes];
-                newGenomes[genomeIndex] = {
-                    ...genome,
-                    cubePool: genome.cubePool - amount
-                };
+                const newGenomes = context.genomes.map((g, idx) =>
+                    idx === genomeIndex ? { ...g, cubePool: g.cubePool - amount } : g
+                );
                 return { genomes: newGenomes };
             }
 
@@ -304,60 +304,102 @@ export const apexNebulaMachine = createMachine({
             if (context.gamePhase === 'setup' && newCubes > 6) return {};
             if (genome.cubePool - amount < 0 && amount > 0) return {};
 
-            const newGenomes = [...context.genomes];
-            newGenomes[genomeIndex] = {
-                ...genome,
-                baseAttributes: {
-                    ...genome.baseAttributes,
-                    [attribute]: newCubes
-                },
-                cubePool: genome.cubePool - amount
-            };
+            const newGenomes = context.genomes.map((g, idx) =>
+                idx === genomeIndex ? {
+                    ...g,
+                    baseAttributes: {
+                        ...g.baseAttributes,
+                        [attribute]: newCubes
+                    },
+                    cubePool: g.cubePool - amount
+                } : g
+            );
             return { genomes: newGenomes };
         }),
 
 
-        movePlayer: assign(({ context, event }) => {
+        nextPhenotypePlayer: assign(({ context }) => ({
+            currentPlayerIndex: context.currentPlayerIndex + 1
+        })),
+
+        moveAndHarvest: assign(({ context, event }) => {
             if (event.type !== 'MOVE_PLAYER') return {};
             const { playerId, hexId } = event;
+            console.log(`Action: moveAndHarvest for ${playerId} to ${hexId}`);
+
             const pieceIndex = context.pieces.findIndex(p => p.playerId === playerId);
             if (pieceIndex === -1) return {};
-            const newPieces = [...context.pieces];
-            newPieces[pieceIndex] = { ...newPieces[pieceIndex], hexId };
-            return { pieces: newPieces };
-        }),
 
-        colonizePlanet: assign(({ context, event }) => {
-            if (event.type !== 'COLONIZE_PLANET') return {};
-            const { playerId } = event;
+            const targetHex = context.hexGrid.find(h => h.id === hexId);
+            if (!targetHex) return {};
+
+            // 1. Move the piece
+            const newPieces = context.pieces.map((p, idx) =>
+                idx === pieceIndex ? { ...p, hexId } : p
+            );
+
+            // 2. Automated Harvest Logic
             const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
-            const piece = context.pieces.find(p => p.playerId === playerId);
-            if (genomeIndex === -1 || !piece) return {};
-            const hex = context.hexGrid.find(h => h.id === piece.hexId);
-            if (!hex || hex.type === 'HomeNebula') return {};
             const genome = context.genomes[genomeIndex];
-            const roll = Math.floor(Math.random() * 6) + 1;
-            const interference = roll <= 2 ? -1 : (roll >= 5 ? 1 : 0);
-            const attributeSum = calculateFitness(genome, hex);
-            const totalScore = attributeSum + interference;
-            const success = totalScore >= hex.threshold;
-            const newGenomes = [...context.genomes];
-            if (success) {
-                newGenomes[genomeIndex] = {
-                    ...genome,
-                    rawMatter: genome.rawMatter + hex.yield.matter,
-                    dataClusters: genome.dataClusters + hex.yield.data,
-                };
+            const results: { success: boolean; attribute: string; roll: number; magnitude: number }[] = [];
+
+            // Seeded PRNG for deterministic harvest
+            const seed = (context.seed || 12345) + context.round + context.currentPlayerIndex + (context.phenotypeActions[playerId]?.movesMade || 0);
+            const prng = createPRNG(seed);
+
+            const attrsToCheck = Array.isArray(targetHex.targetAttribute) ? targetHex.targetAttribute : [targetHex.targetAttribute];
+            const isDoubleAward = targetHex.yield.matter > 0 && targetHex.yield.data > 0;
+            const checks = isDoubleAward ? [attrsToCheck[0], attrsToCheck[0]] : attrsToCheck;
+
+            let anyFailure = false;
+            let successMatter = false;
+            let successData = false;
+
+            checks.forEach((attr, index) => {
+                const roll = rollSeededDice(prng, 6);
+                const magnitude = roll <= 2 ? -1 : roll <= 4 ? 0 : 1;
+                const attrValue = (genome.baseAttributes[attr] || 0) + (genome.mutationModifiers[attr] || 0);
+                const success = (attrValue + magnitude) >= targetHex.threshold;
+
+                results.push({ success, attribute: attr, roll, magnitude });
+
+                if (!success) {
+                    anyFailure = true;
+                } else if (isDoubleAward) {
+                    if (index === 0) successMatter = true;
+                    if (index === 1) successData = true;
+                }
+            });
+
+            let stabilityLoss = 0;
+            if (isDoubleAward) {
+                if (!successMatter) stabilityLoss++;
+                if (!successData) stabilityLoss++;
             } else {
-                newGenomes[genomeIndex] = {
-                    ...genome,
-                    insightTokens: genome.insightTokens + 1,
-                };
+                if (anyFailure) stabilityLoss++;
             }
+
+            const newGenomes = context.genomes.map((g, idx) => {
+                if (idx !== genomeIndex) return g;
+                return {
+                    ...g,
+                    rawMatter: g.rawMatter + (isDoubleAward ? (successMatter ? targetHex.yield.matter : 0) : (!anyFailure ? targetHex.yield.matter : 0)),
+                    dataClusters: g.dataClusters + (isDoubleAward ? (successData ? targetHex.yield.data : 0) : (!anyFailure ? targetHex.yield.data : 0)),
+                    stability: Math.max(0, g.stability - stabilityLoss)
+                };
+            });
+
+            // 3. Update phenotype actions tracking
+            const currentActions = context.phenotypeActions[playerId] || { movesMade: 0, harvestDone: false };
+
             return {
+                pieces: newPieces,
                 genomes: newGenomes,
-                lastHarvestRoll: roll,
-                lastHarvestSuccess: success
+                lastHarvestResults: results,
+                phenotypeActions: {
+                    ...context.phenotypeActions,
+                    [playerId]: { ...currentActions, movesMade: currentActions.movesMade + 1 }
+                }
             };
         }),
 
@@ -460,10 +502,12 @@ export const apexNebulaMachine = createMachine({
             currentPlayerIndex: 0,
             mutationResults: {},
             lastMutationRoll: null,
-            lastHarvestRoll: null,
             lastHarvestSuccess: null,
+            lastHarvestResults: [],
+            phenotypeActions: {},
             confirmedPlayers: [],
         })),
+
     },
     guards: {
         allPlayersConfirmed: ({ context }) => {
@@ -479,6 +523,47 @@ export const apexNebulaMachine = createMachine({
         },
         isLastMutationRoll: ({ context }) => {
             return context.currentPlayerIndex >= context.players.length - 1;
-        }
+        },
+        isLastPhenotypeTurn: ({ context }) => {
+            return context.currentPlayerIndex >= context.turnOrder.length - 1;
+        },
+        canMove: ({ context, event }) => {
+            if (event.type !== 'MOVE_PLAYER') return false;
+
+            // 1. Check if it's the player's turn
+            const activePlayerId = context.turnOrder[context.currentPlayerIndex];
+            if (event.playerId !== activePlayerId) {
+                console.log(`Guard: canMove failed - not ${event.playerId}'s turn. Active: ${activePlayerId}`);
+                return false;
+            }
+
+            const genome = context.genomes.find(g => g.playerId === event.playerId);
+            const piece = context.pieces.find(p => p.playerId === event.playerId);
+            const targetHex = context.hexGrid.find(h => h.id === event.hexId);
+            const currentHex = context.hexGrid.find(h => h.id === piece?.hexId);
+
+            if (!genome || !piece || !targetHex || !currentHex) {
+                console.log(`Guard: canMove failed - missing data: genome=${!!genome}, piece=${!!piece}, targetHex=${!!targetHex}, currentHex=${!!currentHex}`);
+                return false;
+            }
+
+            // 2. Adjacency check (Distance must be 1)
+            const d = getHexDistance(currentHex.x, currentHex.y, targetHex.x, targetHex.y);
+            if (d !== 1) {
+                console.log(`Guard: canMove failed - distance ${d} is not 1. From ${currentHex.id} to ${targetHex.id}`);
+                return false;
+            }
+
+            // 3. NAV check (movesMade < NAV)
+            const nav = (genome.baseAttributes['NAV'] || 0) + (genome.mutationModifiers['NAV'] || 0);
+            const actions = context.phenotypeActions[event.playerId] || { movesMade: 0, harvestDone: false };
+
+            if (actions.movesMade >= nav) {
+                console.log(`Guard: canMove failed - no moves left. Moves made: ${actions.movesMade}, NAV: ${nav}`);
+                return false;
+            }
+
+            return true;
+        },
     },
 });

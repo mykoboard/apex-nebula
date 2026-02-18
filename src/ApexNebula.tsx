@@ -70,18 +70,23 @@ const ApexNebula: React.FC<GameProps> = ({
 
     const localPlayer = playerInfos.find(p => p.isLocal);
     const localGenome = state.context.genomes.find(g => g.playerId === localPlayer?.id);
-    const currentPlayer = state.context.players[state.context.currentPlayerIndex];
-    const isLocalPlayerTurn = currentPlayer?.id === localPlayer?.id;
+    const activePlayerId = state.context.turnOrder[state.context.currentPlayerIndex];
+    const currentPlayer = state.context.players.find(p => p.id === activePlayerId);
+    const isLocalPlayerTurn = localPlayer && activePlayerId === localPlayer.id;
     const otherPlayers = playerInfos.filter(p => !p.isLocal);
 
     // Debugging state changes
     useEffect(() => {
+        const activeId = state.context.turnOrder[state.context.currentPlayerIndex];
         console.log('--- UI Render State ---');
         console.log('Current Phase:', state.value);
+        console.log('Turn Order:', state.context.turnOrder);
+        console.log('Current Player Index:', state.context.currentPlayerIndex);
+        console.log('Active Player ID:', activeId);
+        console.log('Local Player ID:', localPlayer?.id);
+        console.log('Is Local Player Turn:', isLocalPlayerTurn);
         console.log('Editable (setupPhase?):', state.matches('setupPhase'));
-        console.log('Cube Pool:', localGenome?.cubePool);
-        console.log('Shared Seed:', state.context.seed);
-    }, [state.value, localGenome?.cubePool, state.context.seed]);
+    }, [state.value, localGenome?.cubePool, state.context.seed, state.context.currentPlayerIndex, state.context.turnOrder, isLocalPlayerTurn]);
 
     // WebRTC message handling
     useEffect(() => {
@@ -136,14 +141,10 @@ const ApexNebula: React.FC<GameProps> = ({
     };
 
 
-    const handleMoveToHex = (hexId: string) => {
-        if (!localPlayer || !isLocalPlayerTurn) return;
-        handleAction('MOVE_PLAYER', { playerId: localPlayer.id, hexId });
-    };
 
-    const handleColonize = (resourceType?: 'Matter' | 'Data') => {
+    const handleFinishTurn = () => {
         if (!localPlayer) return;
-        handleAction('COLONIZE_PLANET', { playerId: localPlayer.id, resourceType });
+        handleAction('FINISH_TURN', { playerId: localPlayer.id });
     };
 
 
@@ -240,7 +241,11 @@ const ApexNebula: React.FC<GameProps> = ({
                         playerColors={Object.fromEntries(
                             state.context.players.map(p => [p.id, COLORS_HEX[p.color]])
                         )}
-                        onHexClick={handleMoveToHex}
+                        onHexClick={(hexId) => isLocalPlayerTurn && handleAction('MOVE_PLAYER', { playerId: localPlayer?.id, hexId })}
+                        currentHexId={state.context.pieces.find(p => p.playerId === localPlayer?.id)?.hexId}
+                        maxDistance={isLocalPlayerTurn &&
+                            ((localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) > (state.context.phenotypeActions[localPlayer?.id!]?.movesMade || 0))
+                            ? 1 : 0}
                     />
                 </div>
 
@@ -272,7 +277,11 @@ const ApexNebula: React.FC<GameProps> = ({
                                 .map(genome => {
                                     const player = state.context.players.find(p => p.id === genome.playerId);
                                     if (!player) return null;
-                                    const isReady = genome.cubePool === 0;
+                                    const playerTurnIdx = state.context.turnOrder.indexOf(genome.playerId);
+                                    const isFinished = state.matches('phenotypePhase')
+                                        ? playerTurnIdx < state.context.currentPlayerIndex
+                                        : genome.cubePool === 0;
+                                    const isReady = isFinished;
                                     return (
                                         <div key={genome.playerId} className="space-y-4">
                                             <div className="flex items-center justify-between">
@@ -425,26 +434,48 @@ const ApexNebula: React.FC<GameProps> = ({
                                     )}
 
 
-                                    {state.matches('phenotypePhase') && isLocalPlayerTurn && (
+                                    {state.matches('phenotypePhase') && (
                                         <>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <Button
-                                                    onClick={() => handleColonize('Matter')}
-                                                    className="w-full h-16 rounded-2xl bg-orange-600 hover:bg-orange-500 text-white font-black text-[10px] uppercase tracking-wider transition-all"
-                                                >
-                                                    Harvest Matter
-                                                </Button>
-                                                <Button
-                                                    onClick={() => handleColonize('Data')}
-                                                    className="w-full h-16 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-wider transition-all"
-                                                >
-                                                    Harvest Data
-                                                </Button>
+                                            <div className="space-y-4">
+                                                {isLocalPlayerTurn ? (
+                                                    <>
+                                                        <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-center space-y-2">
+                                                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
+                                                                Movement Phase Active
+                                                            </p>
+                                                            <p className="text-sm font-black text-white uppercase tracking-widest">
+                                                                {Math.max(0, (localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) - (state.context.phenotypeActions[localPlayer?.id!]?.movesMade || 0))} Units Remaining
+                                                            </p>
+                                                        </div>
+
+                                                        <Button
+                                                            onClick={handleFinishTurn}
+                                                            className="w-full h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-sm uppercase tracking-[0.2em] border border-white/10 transition-all"
+                                                        >
+                                                            Finalize Turn
+                                                        </Button>
+
+                                                    </>
+                                                ) : (
+                                                    <div className="p-6 bg-slate-900/50 rounded-2xl border border-white/5 text-center italic text-slate-500 text-[10px] uppercase tracking-widest">
+                                                        Awaiting Sector Turn...
+                                                    </div>
+                                                )}
                                             </div>
-                                            {state.context.lastHarvestRoll && (
-                                                <div className={`mt-4 p-4 rounded-2xl border font-black text-[10px] uppercase tracking-widest text-center ${state.context.lastHarvestSuccess ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-                                                    {state.context.lastHarvestSuccess ? 'Optimized: ' : 'Interference: '}
-                                                    Roll {state.context.lastHarvestRoll} ({state.context.lastHarvestRoll <= 2 ? '-1' : (state.context.lastHarvestRoll >= 5 ? '+1' : '0')})
+
+                                            {state.context.lastHarvestResults.length > 0 && (
+                                                <div className="mt-4 space-y-2">
+                                                    <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-1">Last Extraction Result</div>
+                                                    {state.context.lastHarvestResults.map((res, i) => (
+                                                        <div key={i} className={`p-3 rounded-xl border flex items-center justify-between font-black text-[10px] uppercase tracking-widest ${res.success ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                                                            <span>Check {i + 1} ({res.attribute})</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <Dice6 className="w-3 h-3" />
+                                                                <span>Roll {res.roll} ({res.magnitude > 0 ? '+1' : res.magnitude < 0 ? '-1' : '0'})</span>
+                                                                <span className="ml-2 px-1.5 py-0.5 bg-black/30 rounded border border-white/5">{res.success ? 'Success' : 'Failure'}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             )}
                                         </>

@@ -76,8 +76,9 @@ export interface ApexNebulaContext {
     ledger?: LedgerEntry[];
     winners: string[];
     lastMutationRoll: number | null;
-    lastHarvestRoll: number | null;
     lastHarvestSuccess: boolean | null;
+    lastHarvestResults: { success: boolean; attribute: string; roll: number; magnitude: number }[];
+    phenotypeActions: Record<string, { movesMade: number; harvestDone: boolean }>;
     confirmedPlayers: string[];
 }
 
@@ -87,7 +88,7 @@ export type ApexNebulaEvent =
     | { type: 'SPEND_INSIGHT'; playerId: string; amount: number }
     | { type: 'DISTRIBUTE_CUBES'; playerId: string; attribute: AttributeType; amount: number }
     | { type: 'INITIATE_MUTATION' }
-    | { type: 'COLONIZE_PLANET'; playerId: string; resourceType?: 'Matter' | 'Data' }
+    | { type: 'FINISH_TURN'; playerId: string }
     | { type: 'CONFIRM_PHASE'; playerId: string }
     | { type: 'HUSTLE'; attackerId: string; defenderId: string; category: string }
     | { type: 'NEXT_PHASE' }

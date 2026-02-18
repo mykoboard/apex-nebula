@@ -33,3 +33,18 @@ export const rollSeededDice = (prng: () => number, sides: number): number => {
 export const checkWinCondition = (genome: PlayerGenome): boolean => {
     return genome.dataClusters >= 30;
 };
+
+// Helper: Get Axial Hex Distance
+export const getHexDistance = (q1: number, r1: number, q2: number, r2: number): number => {
+    return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
+};
+
+// Helper: Seeded Shuffle
+export const shuffleSeeded = <T>(array: T[], prng: () => number): T[] => {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(prng() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+};
