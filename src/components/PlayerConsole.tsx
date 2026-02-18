@@ -90,10 +90,14 @@ const PlayerConsole: React.FC<PlayerConsoleProps> = ({ genome, onDistribute, edi
                                             if (setupLimit && targetValue > setupLimit) return;
                                             const currentValue = genome.baseAttributes?.[attr.type] ?? 0;
                                             if (targetValue === currentValue) return;
+
+                                            // During Optimization (no setupLimit), forbid reductions
+                                            if (!setupLimit && targetValue < currentValue) return;
+
                                             onDistribute?.(attr.type, targetValue - currentValue);
                                         }}
                                         className={`flex-1 h-full rounded-sm border transition-all duration-300 relative group/slot
-                                            ${editable && (!setupLimit || i < setupLimit)
+                                            ${editable && (setupLimit ? i < setupLimit : i >= (genome.baseAttributes?.[attr.type] ?? 0))
                                                 ? 'cursor-pointer hover:ring-2 hover:ring-white/30 hover:scale-[1.05] hover:z-10'
                                                 : 'cursor-not-allowed opacity-40'} 
                                             ${i < (genome.baseAttributes?.[attr.type] ?? 0)

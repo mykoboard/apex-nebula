@@ -105,7 +105,7 @@ export interface ApexNebulaContext {
     winners: string[];
     lastMutationRoll: number | null;
     lastHarvestSuccess: boolean | null;
-    lastHarvestResults: { success: boolean; attribute: string; roll: number; magnitude: number }[];
+    lastHarvestResults: { playerId: string; success: boolean; attribute: string; roll: number; magnitude: number }[];
     phenotypeActions: Record<string, { movesMade: number; harvestDone: boolean }>;
     confirmedPlayers: string[];
     lastEventResults?: Record<string, { roll: number; modifier: number; success: boolean }>;
@@ -120,6 +120,8 @@ export type ApexNebulaEvent =
     | { type: 'FINISH_TURN'; playerId: string }
     | { type: 'CONFIRM_PHASE'; playerId: string }
     | { type: 'HUSTLE'; attackerId: string; defenderId: string; category: string }
+    | { type: 'PRUNE_ATTRIBUTE'; playerId: string; attribute: AttributeType }
+    | { type: 'OPTIMIZE_DATA'; playerId: string }
     | { type: 'NEXT_PHASE' }
     | { type: 'FORCE_EVENT'; eventId: string }
     | { type: 'START_GAME'; seed?: number }

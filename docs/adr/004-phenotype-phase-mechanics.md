@@ -19,8 +19,10 @@ The Phenotype Phase is the primary interaction phase where players move across t
     - **Standard Tiles**: Single check. Success awards yields; Failure costs 1 Stability.
     - **Double Award Tiles** (Both Matter and Data > 0): Two independent checks. The first for Matter, second for Data. Stability is lost for each failed check.
     - **Multi-Attribute Tiles** (Array of attributes): Sequential checks. Success for ALL attributes is required to gain any resources. Failure in any check costs 1 Stability.
-5. **State Management**:
-    - The machine will track the current player's remaining movement and harvest status to enforce "move then harvest" or "harvest then move" constraints.
+5. **Round Initialization**:
+    - At the start of each Phenotype phase, all player move counts are reset to zero.
+    - Available move units for the round are dynamically calculated: `NAV (Base) + Mutation Modifiers`.
+    - This ensures that attribute increases gained in the Optimization phase are immediately impactful in the following round.
 
 ## Consequences
 - **Strategic Depth**: Navigation choices become critical as movement range is tied to genome evolution.

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useMachine } from '@xstate/react';
 import { GameProps, createGameMessage, isGameMessage } from '@mykoboard/integration';
 import { apexNebulaMachine } from './apexNebulaMachine';
-import { Color, Player } from './types';
+import { Color, Player, AttributeType } from './types';
 
 import HexGrid from './components/HexGrid';
 import PlayerConsole from './components/PlayerConsole';
@@ -356,20 +356,36 @@ const ApexNebula: React.FC<GameProps> = ({
                                             </div>
                                         )}
 
-                                        {state.context.lastHarvestResults.length > 0 && (
-                                            <div className="space-y-2">
-                                                <div className="text-[8px] font-black text-slate-500 uppercase">Last Extraction</div>
-                                                {state.context.lastHarvestResults.map((res, i) => (
-                                                    <div key={i} className={`p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase ${res.success ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-                                                        <span>{res.attribute}</span>
-                                                        <div className="flex items-center gap-1">
-                                                            <span>Roll {res.roll}</span>
-                                                            <span className="px-1 bg-black/30 rounded">{res.success ? 'OK' : 'FAIL'}</span>
+                                        {/* Local turn buttons are here */}
+                                    </div>
+                                )}
+
+                                {state.matches('phenotypePhase') && state.context.lastHarvestResults.length > 0 && (
+                                    <div className="space-y-3">
+                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                            <div className="w-1 h-3 bg-cyan-500 rounded-full" />
+                                            Latest Extractions
+                                        </div>
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                                            {state.context.lastHarvestResults.map((res, i) => {
+                                                const p = state.context.players.find(pl => pl.id === res.playerId);
+                                                return (
+                                                    <div key={i} className={`p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase tracking-tight ${res.success ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                                                        <span className="truncate max-w-[70px]">{p?.name || 'Unknown'}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="opacity-70">{res.attribute}</span>
+                                                            <div className="flex items-center gap-1">
+                                                                <Dice6 className="w-3 h-3 opacity-50" />
+                                                                <span>{res.roll}</span>
+                                                                <span className={`text-[7px] px-1 rounded ${res.success ? 'bg-cyan-500/20' : 'bg-red-500/20'}`}>
+                                                                    {res.success ? 'SUCCESS' : 'FAILURE'}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 )}
 
@@ -410,6 +426,65 @@ const ApexNebula: React.FC<GameProps> = ({
                                         Resolve Competitive
                                     </Button>
                                 )}
+
+                                {state.matches('optimizationPhase') && (
+                                    <div className="space-y-4">
+                                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-black text-indigo-400 uppercase">Data Optimization</span>
+                                                <span className="text-[10px] font-black text-white">{localGenome?.dataClusters || 0}/3</span>
+                                            </div>
+                                            <Button
+                                                onClick={() => handleAction('OPTIMIZE_DATA', { playerId: localPlayer?.id })}
+                                                disabled={!localGenome || localGenome.dataClusters < 3 || state.context.confirmedPlayers.includes(localPlayer?.id || '')}
+                                                className="w-full h-8 bg-indigo-600 hover:bg-indigo-500 text-[9px] uppercase font-black tracking-widest rounded-lg"
+                                            >
+                                                <Zap className="w-3 h-3 mr-2" />
+                                                Gain Attribute Cube
+                                            </Button>
+                                        </div>
+
+                                        <div className="p-3 bg-slate-900/50 border border-white/5 rounded-xl space-y-3">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase">Attribute Pruning</span>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {(['NAV', 'LOG', 'DEF', 'SCN'] as AttributeType[]).map(attr => (
+                                                    <Button
+                                                        key={attr}
+                                                        onClick={() => handleAction('PRUNE_ATTRIBUTE', { playerId: localPlayer?.id, attribute: attr })}
+                                                        disabled={!localGenome || localGenome.baseAttributes[attr] <= 1 || state.context.confirmedPlayers.includes(localPlayer?.id || '')}
+                                                        variant="outline"
+                                                        className="h-8 text-[8px] font-black uppercase border-white/5 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all"
+                                                    >
+                                                        Prune {attr}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                            <p className="text-[7px] text-slate-500 italic text-center uppercase tracking-tight">+2 Matter per pruned level</p>
+                                        </div>
+
+                                        <div className="pt-2">
+                                            <Button
+                                                onClick={() => handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })}
+                                                disabled={state.context.confirmedPlayers.includes(localPlayer?.id || '')}
+                                                className={`w-full h-12 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${state.context.confirmedPlayers.includes(localPlayer?.id || '')
+                                                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                                    : (localGenome?.rawMatter || 0) >= 1
+                                                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                                        : 'bg-red-900/40 text-red-400 border border-red-500/20'
+                                                    }`}
+                                            >
+                                                {state.context.confirmedPlayers.includes(localPlayer?.id || '')
+                                                    ? 'Maint Sequence Active'
+                                                    : (localGenome?.rawMatter || 0) >= 1
+                                                        ? 'Finalize (Pay 1 Matter)'
+                                                        : 'Insufficient Matter'}
+                                            </Button>
+                                            <p className="text-[7px] text-slate-500 text-center mt-2 uppercase opacity-50">
+                                                Resets Stability to 3 | Caps Data/Matter at 2
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -426,7 +501,7 @@ const ApexNebula: React.FC<GameProps> = ({
                         {localGenome && (
                             <PlayerConsole
                                 genome={localGenome}
-                                editable={state.matches('setupPhase') || localGenome.cubePool > 0}
+                                editable={state.matches('setupPhase') || localGenome.cubePool > 0 || state.matches('optimizationPhase')}
                                 setupLimit={state.matches('setupPhase') ? 6 : undefined}
                                 onDistribute={(attr, amt) => handleAction('DISTRIBUTE_CUBES', { playerId: localPlayer?.id, attribute: attr, amount: amt })}
                             />

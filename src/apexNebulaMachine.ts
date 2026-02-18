@@ -80,7 +80,8 @@ export const apexNebulaMachine = createMachine({
             entry: [
                 assign({
                     gamePhase: 'mutation',
-                    currentPlayerIndex: 0
+                    currentPlayerIndex: 0,
+                    confirmedPlayers: []
                 }),
                 () => console.log('Machine State: mutationPhase')
             ],
@@ -97,6 +98,9 @@ export const apexNebulaMachine = createMachine({
                 CONFIRM_PHASE: {
                     actions: 'confirmPhase',
                 },
+                DISTRIBUTE_CUBES: {
+                    actions: 'distributeCubes',
+                },
             },
             always: {
                 target: 'phenotypePhase',
@@ -105,7 +109,12 @@ export const apexNebulaMachine = createMachine({
         },
         phenotypePhase: {
             entry: [
-                assign({ gamePhase: 'phenotype', confirmedPlayers: [], currentPlayerIndex: 0 }),
+                assign({
+                    gamePhase: 'phenotype',
+                    confirmedPlayers: [],
+                    currentPlayerIndex: 0,
+                    phenotypeActions: {}
+                }),
                 () => console.log('Machine State: phenotypePhase')
             ],
             on: {
@@ -148,14 +157,30 @@ export const apexNebulaMachine = createMachine({
             },
         },
         optimizationPhase: {
-            entry: assign({ gamePhase: 'optimization' }),
+            entry: assign({ gamePhase: 'optimization', confirmedPlayers: [] }),
             on: {
+                OPTIMIZE_DATA: {
+                    actions: 'optimizeData',
+                },
+                PRUNE_ATTRIBUTE: {
+                    actions: 'pruneAttribute',
+                },
+                CONFIRM_PHASE: {
+                    actions: 'confirmPhase',
+                },
+                DISTRIBUTE_CUBES: {
+                    actions: 'distributeCubes',
+                },
                 NEXT_PHASE: [
-                    { target: 'won', guard: 'checkWin' },
-                    { target: 'nextRound' },
+                    { target: 'won', guard: 'checkWin', actions: 'finalizeOptimization' },
+                    { target: 'nextRound', actions: 'finalizeOptimization' },
                 ],
-                // Add spending data cluster here if needed, for now we just track it in types
             },
+            always: {
+                target: 'nextRound',
+                guard: 'allPlayersConfirmed',
+                actions: 'finalizeOptimization'
+            }
         },
         nextRound: {
             always: {
@@ -308,6 +333,7 @@ export const apexNebulaMachine = createMachine({
 
             if (newCubes < 1 || newCubes > 10) return {};
             if (context.gamePhase === 'setup' && newCubes > 6) return {};
+            if (context.gamePhase === 'optimization' && amount < 0) return {}; // No reductions in Optimization
             if (genome.cubePool - amount < 0 && amount > 0) return {};
 
             const newGenomes = context.genomes.map((g, idx) =>
@@ -347,7 +373,7 @@ export const apexNebulaMachine = createMachine({
             // 2. Automated Harvest Logic
             const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
             const genome = context.genomes[genomeIndex];
-            const results: { success: boolean; attribute: string; roll: number; magnitude: number }[] = [];
+            const results: { playerId: string; success: boolean; attribute: string; roll: number; magnitude: number }[] = [];
 
             // Seeded PRNG for deterministic harvest
             const seed = (context.seed || 12345) + context.round + context.currentPlayerIndex + (context.phenotypeActions[playerId]?.movesMade || 0);
@@ -367,7 +393,7 @@ export const apexNebulaMachine = createMachine({
                 const attrValue = (genome.baseAttributes[attr] || 0) + (genome.mutationModifiers[attr] || 0);
                 const success = (attrValue + magnitude) >= targetHex.threshold;
 
-                results.push({ success, attribute: attr, roll, magnitude });
+                results.push({ playerId, success, attribute: attr, roll, magnitude });
 
                 if (!success) {
                     anyFailure = true;
@@ -794,6 +820,55 @@ export const apexNebulaMachine = createMachine({
         recordWinner: assign(({ context }) => {
             const winnerIds = context.genomes.filter(g => checkWinCondition(g)).map(g => g.playerId);
             return { winners: winnerIds };
+        }),
+
+        optimizeData: assign(({ context, event }) => {
+            if (event.type !== 'OPTIMIZE_DATA') return {};
+            const { playerId } = event;
+            const genome = context.genomes.find(g => g.playerId === playerId);
+            if (!genome || genome.dataClusters < 3) return {};
+
+            return {
+                genomes: context.genomes.map(g =>
+                    g.playerId === playerId
+                        ? { ...g, dataClusters: g.dataClusters - 3, cubePool: g.cubePool + 1 }
+                        : g
+                )
+            };
+        }),
+
+        pruneAttribute: assign(({ context, event }) => {
+            if (event.type !== 'PRUNE_ATTRIBUTE') return {};
+            const { playerId, attribute } = event;
+            const genome = context.genomes.find(g => g.playerId === playerId);
+            if (!genome || genome.baseAttributes[attribute] <= 1) return {};
+
+            return {
+                genomes: context.genomes.map(g =>
+                    g.playerId === playerId
+                        ? {
+                            ...g,
+                            baseAttributes: { ...g.baseAttributes, [attribute]: g.baseAttributes[attribute] - 1 },
+                            rawMatter: g.rawMatter + 2
+                        }
+                        : g
+                )
+            };
+        }),
+
+        finalizeOptimization: assign(({ context }) => {
+            // Maintenance: Stability -> 3, Data/Matter cap at 2, Reset Mutations
+            // Note: User mentioned "pay required matter", implying 1 matter for maintenance
+            return {
+                genomes: context.genomes.map(g => ({
+                    ...g,
+                    stability: 3,
+                    mutationModifiers: { ...EMPTY_MODS },
+                    dataClusters: Math.min(2, g.dataClusters),
+                    rawMatter: Math.max(0, Math.min(2, g.rawMatter - 1)), // Subtract 1 for maintenance, then cap
+                })),
+                lastHarvestResults: []
+            };
         }),
 
         resetGame: assign(({ context }) => ({
