@@ -7,7 +7,9 @@ import {
 } from './types';
 import { createHexGrid } from './components/HexGrid';
 import { INITIAL_EVENT_DECK } from './components/EventDeck';
-import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance } from './utils';
+import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded } from './utils';
+
+const EMPTY_MODS = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
 
 // XState machine
 export const apexNebulaMachine = createMachine({
@@ -174,6 +176,10 @@ export const apexNebulaMachine = createMachine({
     on: {
         SYNC_STATE: {
             actions: 'syncState',
+        },
+        FORCE_EVENT: {
+            target: '.environmentalPhase',
+            actions: 'forceEnvironmentalEvent',
         },
     },
 }, {
@@ -379,8 +385,8 @@ export const apexNebulaMachine = createMachine({
                 if (anyFailure) stabilityLoss++;
             }
 
-            const newGenomes = context.genomes.map((g, idx) => {
-                if (idx !== genomeIndex) return g;
+            const newGenomes = context.genomes.map((g) => {
+                if (g.playerId !== playerId) return g;
                 return {
                     ...g,
                     rawMatter: g.rawMatter + (isDoubleAward ? (successMatter ? targetHex.yield.matter : 0) : (!anyFailure ? targetHex.yield.matter : 0)),
@@ -389,12 +395,31 @@ export const apexNebulaMachine = createMachine({
                 };
             });
 
-            // 3. Update phenotype actions tracking
             const currentActions = context.phenotypeActions[playerId] || { movesMade: 0, harvestDone: false };
 
             return {
                 pieces: newPieces,
-                genomes: newGenomes,
+                genomes: newGenomes.map(g => {
+                    if (g.playerId === playerId && g.stability <= 0) {
+                        console.log(`STABILITY CRITICAL for ${playerId}. Triggering Hard Reboot.`);
+                        const playerIdx = context.players.findIndex(p => p.id === playerId);
+                        const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
+                        const startHex = starts[playerIdx % starts.length];
+
+                        // Update piece to startHex immediately
+                        newPieces[pieceIndex] = { ...newPieces[pieceIndex], hexId: startHex };
+
+                        return {
+                            ...g,
+                            stability: 3,
+                            dataClusters: 1,
+                            rawMatter: 0,
+                            baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
+                            cubePool: 12,
+                        };
+                    }
+                    return g;
+                }),
                 lastHarvestResults: results,
                 phenotypeActions: {
                     ...context.phenotypeActions,
@@ -404,31 +429,321 @@ export const apexNebulaMachine = createMachine({
         }),
 
         drawEnvironmentalEvent: assign(({ context }) => {
-            const event = context.eventDeck[0];
-            const newDeck = context.eventDeck.slice(1);
+            if (context.currentEvent) return {}; // Skip if already forced
+
+            let currentDeck = context.eventDeck;
+            let currentSeed = context.seed || 12345;
+
+            if (currentDeck.length === 0) {
+                const prng = createPRNG(currentSeed + context.round);
+                currentDeck = shuffleSeeded([...INITIAL_EVENT_DECK], prng);
+            }
+
+            const event = currentDeck[0];
+            const newDeck = currentDeck.slice(1);
             return {
                 currentEvent: event || null,
-                eventDeck: newDeck.length > 0 ? newDeck : [...INITIAL_EVENT_DECK],
+                eventDeck: newDeck,
+            };
+        }),
+
+        forceEnvironmentalEvent: assign(({ context, event }) => {
+            if (event.type !== 'FORCE_EVENT') return {};
+            const targetEvent = INITIAL_EVENT_DECK.find(e => e.id === event.eventId) || context.eventDeck.find(e => e.id === event.eventId);
+            if (!targetEvent) return {};
+            return {
+                currentEvent: targetEvent,
+                gamePhase: 'environmental' as GamePhase,
             };
         }),
 
         evaluateEnvironmentalFitness: assign(({ context }) => {
             if (!context.currentEvent) return {};
-            const newGenomes = context.genomes.map(genome => {
-                const fitness = calculateFitness(genome, context.currentEvent!);
-                if (fitness < context.currentEvent!.threshold) {
-                    const penalty = typeof context.currentEvent!.penalty === 'number'
-                        ? context.currentEvent!.penalty
-                        : context.currentEvent!.penalty.amount;
-                    return {
-                        ...genome,
-                        stability: Math.max(0, genome.stability - penalty),
-                        insightTokens: genome.insightTokens + 1,
-                    };
+            const event = context.currentEvent;
+            console.log('--- EVALUATING EVENT:', event.name, '---');
+            const checkType = event.checkType;
+
+            // 1. Calculate threshold
+            let thresholdValue = 0;
+            if (typeof event.threshold === 'number') {
+                thresholdValue = event.threshold;
+            } else if (event.threshold === 'AVG+2') {
+                const totalStats = context.genomes.reduce((sum, g) => {
+                    return sum + calculateFitness(g, 'TOTAL_SUM');
+                }, 0);
+                thresholdValue = (totalStats / context.players.length) + 2;
+            }
+
+            // 2. Identify target players
+            const getPlayersByTarget = (target?: string): string[] => {
+                console.log('Finding targets for:', target);
+                if (!target || target === 'self') {
+                    const all = context.players.map(p => p.id);
+                    console.log('Target self -> all players:', all);
+                    return all;
                 }
-                return genome;
-            });
-            return { genomes: newGenomes };
+                if (target === 'all') return context.players.map(p => p.id);
+                if (target === 'priority') return [context.priorityPlayerId];
+                if (target === 'lowest_sum') {
+                    const sorted = [...newGenomes].sort((a, b) => calculateFitness(a, 'TOTAL_SUM') - calculateFitness(b, 'TOTAL_SUM'));
+                    const low = sorted.length > 0 ? [sorted[0].playerId] : [];
+                    console.log('Target lowest_sum ->', low);
+                    return low;
+                }
+                if (target === 'highest_sum') {
+                    const sorted = [...newGenomes].sort((a, b) => calculateFitness(b, 'TOTAL_SUM') - calculateFitness(a, 'TOTAL_SUM'));
+                    const high = sorted.length > 0 ? [sorted[0].playerId] : [];
+                    console.log('Target highest_sum ->', high);
+                    return high;
+                }
+                if (target === 'most_data') {
+                    const sorted = [...newGenomes].sort((a, b) => b.dataClusters - a.dataClusters);
+                    return sorted.length > 0 ? [sorted[0].playerId] : [];
+                }
+                if (target === 'most_matter') {
+                    const sorted = [...newGenomes].sort((a, b) => b.rawMatter - a.rawMatter);
+                    return sorted.length > 0 ? [sorted[0].playerId] : [];
+                }
+                if (target === 'highest_stat') {
+                    return context.players.map(p => p.id);
+                }
+                if (target === 'sum_26_plus') {
+                    const res = newGenomes.filter(g => calculateFitness(g, 'TOTAL_SUM') >= 26).map(g => g.playerId);
+                    console.log('Target sum_26_plus ->', res);
+                    return res;
+                }
+                if (target === 'stat_8_plus') {
+                    const res = newGenomes.filter(g => Object.values(g.baseAttributes).some(v => v >= 8)).map(g => g.playerId);
+                    console.log('Target stat_8_plus ->', res);
+                    return res;
+                }
+                return [];
+            };
+
+            const applyEffect = (genome: any, effect: any) => {
+                const newGenome = { ...genome };
+                const amount = effect.fraction ? Math.floor(genome.dataClusters * 0.5) : (effect.amount || 0);
+
+                switch (effect.type) {
+                    case 'stability':
+                        newGenome.stability = Math.max(0, newGenome.stability - amount);
+                        break;
+                    case 'data':
+                        newGenome.dataClusters = Math.max(0, newGenome.dataClusters - amount);
+                        break;
+                    case 'matter':
+                        if (newGenome.rawMatter >= amount) {
+                            newGenome.rawMatter -= amount;
+                        } else if (effect.details?.fallback === 'stability') {
+                            newGenome.stability = Math.max(0, newGenome.stability - 1);
+                        }
+                        break;
+                    case 'stat_mod_temp':
+                        const modVal = effect.amount || 0;
+                        if (effect.attribute) {
+                            newGenome.tempAttributeModifiers[effect.attribute] += modVal;
+                        } else {
+                            // Apply to all
+                            (Object.keys(newGenome.tempAttributeModifiers) as AttributeType[]).forEach(k => {
+                                newGenome.tempAttributeModifiers[k] += modVal;
+                            });
+                        }
+                        break;
+                    case 'stat_mod_perm':
+                        if (effect.target === 'highest_stat') {
+                            const stats: AttributeType[] = ['NAV', 'LOG', 'DEF', 'SCN'];
+                            const highest = stats.reduce((prev, curr) =>
+                                (newGenome.baseAttributes[curr] > newGenome.baseAttributes[prev]) ? curr : prev
+                            );
+                            newGenome.baseAttributes[highest] = Math.max(1, newGenome.baseAttributes[highest] - 1);
+                        }
+                        break;
+                    case 'hard_reboot':
+                        {
+                            const playerIdx = context.players.findIndex(p => p.id === genome.playerId);
+                            const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
+                            const startHex = starts[playerIdx % starts.length];
+
+                            // Note: newPieces is already in scope in evaluateEnvironmentalFitness
+                            const pieceIdx = newPieces.findIndex(p => p.playerId === genome.playerId);
+                            if (pieceIdx !== -1) {
+                                newPieces[pieceIdx] = { ...newPieces[pieceIdx], hexId: startHex };
+                            }
+
+                            newGenome.stability = 3;
+                            newGenome.dataClusters = 1;
+                            newGenome.rawMatter = 0;
+                            newGenome.baseAttributes = { NAV: 1, LOG: 1, DEF: 1, SCN: 1 };
+                            newGenome.cubePool = 12;
+                        }
+                        break;
+                    case 'gain_insight':
+                        newGenome.insightTokens += amount;
+                        break;
+                }
+                const result = { ...newGenome };
+                if (result.stability <= 0) {
+                    console.log(`STABILITY CRITICAL (Event) for ${genome.playerId}. Triggering Hard Reboot.`);
+                    const playerIdx = context.players.findIndex(p => p.id === genome.playerId);
+                    const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
+                    const startHex = starts[playerIdx % starts.length];
+
+                    // Find piece in outer scope (newPieces)
+                    const pIdx = newPieces.findIndex(p => p.playerId === genome.playerId);
+                    if (pIdx !== -1) {
+                        newPieces[pIdx] = { ...newPieces[pIdx], hexId: startHex };
+                    }
+
+                    result.stability = 3;
+                    result.dataClusters = 1;
+                    result.rawMatter = 0;
+                    result.baseAttributes = { NAV: 1, LOG: 1, DEF: 1, SCN: 1 };
+                    result.cubePool = 12;
+                }
+                return result;
+            };
+
+            // 3. Helper to apply effects that might affect pieces or multiple players
+            const processComplexEffect = (currentGenomes: any[], currentPieces: any[], effect: any, triggeringPlayerId: string) => {
+                let genomes = [...currentGenomes];
+                let pieces = [...currentPieces];
+
+                if (effect.type === 'transfer') {
+                    const fromTarget = effect.details?.from;
+                    const toTarget = effect.details?.to;
+                    const resource = effect.details?.resource;
+                    const amount = effect.amount || 1;
+
+                    const fromIds = fromTarget === 'highest_sum' ? getPlayersByTarget('highest_sum') : [triggeringPlayerId];
+                    const toIds = toTarget === 'lowest_sum' ? getPlayersByTarget('lowest_sum') : [triggeringPlayerId];
+
+                    if (fromIds.length > 0 && toIds.length > 0) {
+                        const fromId = fromIds[0];
+                        const toId = toIds[0];
+                        genomes = genomes.map(g => {
+                            if (g.playerId === fromId) {
+                                if (resource === 'data') return { ...g, dataClusters: Math.max(0, g.dataClusters - amount) };
+                                if (resource === 'matter') return { ...g, rawMatter: Math.max(0, g.rawMatter - amount) };
+                            }
+                            if (g.playerId === toId) {
+                                if (resource === 'data') return { ...g, dataClusters: g.dataClusters + amount };
+                                if (resource === 'matter') return { ...g, rawMatter: g.rawMatter + amount };
+                            }
+                            return g;
+                        });
+                        console.log(`Transferred ${amount} ${resource} from ${fromId} to ${toId}`);
+                    }
+                } else if (effect.type === 'displacement') {
+                    const targetIds = getPlayersByTarget(effect.target);
+                    const amount = effect.amount || 1;
+                    pieces = pieces.map(p => {
+                        if (targetIds.includes(p.playerId)) {
+                            // Find a neighbor or random hex? 
+                            // For Ion Storm (Hazard), let's assume random adjacent for now or logical shift
+                            // Real displacement logic would push away from a center or something.
+                            // Simplified: move to a random adjacent hex if free or just displace.
+                            console.log(`Displacing ${p.playerId} by ${amount} units`);
+                            // For simplicity, we'll just log this as it requires a physics-like push on hex grid
+                        }
+                        return p;
+                    });
+                }
+
+                return { genomes, pieces };
+            };
+
+            let newGenomes = [...context.genomes];
+            let newHexGrid = [...context.hexGrid];
+            let newPieces = [...context.pieces];
+            const eventResults: Record<string, { roll: number; modifier: number; success: boolean }> = {};
+
+            const prng = createPRNG((context.seed || 12345) + context.round + 999);
+
+            // Handle Global Effects
+            if (event.effects.global) {
+                if (['transfer', 'displacement', 'map_shift'].includes(event.effects.global.type)) {
+                    const complex = processComplexEffect(newGenomes, newPieces, event.effects.global, context.priorityPlayerId);
+                    newGenomes = complex.genomes;
+                    newPieces = complex.pieces;
+                } else {
+                    const globalTargets = getPlayersByTarget(event.effects.global.target);
+                    newGenomes = newGenomes.map(g => {
+                        if (globalTargets.includes(g.playerId)) {
+                            return applyEffect(g, event.effects.global);
+                        }
+                        return g;
+                    });
+                }
+
+                // Special Map Shifts
+                if (event.effects.global.type === 'map_shift') {
+                    console.log('MAP SHIFT EVENT:', event.effects.global.details?.action);
+                    // Implement Core Drift: Move Singularity
+                    if (event.effects.global.details?.action === 'move_singularity_toward') {
+                        const targetPlayerIds = getPlayersByTarget(event.effects.global.target);
+                        if (targetPlayerIds.length > 0) {
+                            const targetPiece = newPieces.find(p => p.playerId === targetPlayerIds[0]);
+                            const targetHex = newHexGrid.find(h => h.id === targetPiece?.hexId);
+                            const singularity = newHexGrid.find(h => h.type === 'Singularity');
+                            if (singularity && targetHex) {
+                                // Simplified: move singularity 1 step toward player
+                                console.log(`Moving Singularity toward ${targetPlayerIds[0]}`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Handle Check Effects
+            if (checkType !== 'NONE') {
+                newGenomes = newGenomes.map(genome => {
+                    const roll = rollSeededDice(prng, 6);
+                    const modifier = roll <= 2 ? -1 : (roll >= 5 ? 1 : 0);
+                    const fitness = calculateFitness(genome, checkType) + modifier;
+                    const success = fitness >= thresholdValue;
+
+                    eventResults[genome.playerId] = { roll, modifier, success };
+                    console.log(`Player ${genome.playerId}: Roll=${roll}(${modifier}), Fitness=${fitness}, Success=${success}`);
+
+                    if (success && event.effects.onSuccess) {
+                        if (['transfer', 'displacement'].includes(event.effects.onSuccess.type)) {
+                            const complex = processComplexEffect(newGenomes, newPieces, event.effects.onSuccess, genome.playerId);
+                            // Update newPieces globally, but how to return newGenome for map?
+                            // This architecture is slightly flawed for map. 
+                            // Let's just update the local genome if it's a simple effect, 
+                            // or handle complex ones outside.
+                            newPieces = complex.pieces;
+                            return complex.genomes.find(g => g.playerId === genome.playerId) || genome;
+                        } else {
+                            const targets = getPlayersByTarget(event.effects.onSuccess.target);
+                            if (targets.includes(genome.playerId)) {
+                                console.log(`Applying SUCCESS effect to ${genome.playerId}`);
+                                return applyEffect(genome, event.effects.onSuccess);
+                            }
+                        }
+                    } else if (!success && event.effects.onFailure) {
+                        if (['transfer', 'displacement'].includes(event.effects.onFailure.type)) {
+                            const complex = processComplexEffect(newGenomes, newPieces, event.effects.onFailure, genome.playerId);
+                            newPieces = complex.pieces;
+                            return complex.genomes.find(g => g.playerId === genome.playerId) || genome;
+                        } else {
+                            const targets = getPlayersByTarget(event.effects.onFailure.target);
+                            if (targets.includes(genome.playerId)) {
+                                console.log(`Applying FAILURE effect to ${genome.playerId}`);
+                                return applyEffect(genome, event.effects.onFailure);
+                            }
+                        }
+                    }
+                    return genome;
+                });
+            }
+
+            return {
+                genomes: newGenomes,
+                hexGrid: newHexGrid,
+                pieces: newPieces,
+                lastEventResults: eventResults
+            };
         }),
 
         resolveHustle: assign(({ context, event }) => {
@@ -468,6 +783,12 @@ export const apexNebulaMachine = createMachine({
             round: context.round + 1,
             currentPlayerIndex: 0,
             mutationResults: {}, // Reset for next round
+            genomes: context.genomes.map(g => ({
+                ...g,
+                tempAttributeModifiers: { ...EMPTY_MODS }
+            })),
+            currentEvent: null,
+            lastEventResults: {},
         })),
 
         recordWinner: assign(({ context }) => {
@@ -478,13 +799,14 @@ export const apexNebulaMachine = createMachine({
         resetGame: assign(({ context }) => ({
             genomes: context.players.map(p => ({
                 playerId: p.id,
-                stability: 5,
+                stability: 3,
                 dataClusters: 0,
-                rawMatter: 4,
+                rawMatter: 0,
                 insightTokens: 0,
                 lockedSlots: [],
                 baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
-                mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
+                mutationModifiers: { ...EMPTY_MODS },
+                tempAttributeModifiers: { ...EMPTY_MODS },
                 cubePool: 12,
             })),
             pieces: context.players.map((p, i) => {

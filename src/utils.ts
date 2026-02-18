@@ -1,14 +1,20 @@
 import { PlayerGenome, AttributeType } from './types.ts';
 
 // Helper: Calculate fitness score based on attributes
-export const calculateFitness = (genome: PlayerGenome, target: { targetAttribute: AttributeType | AttributeType[] } | null): number => {
-    if (!target) return 0;
-    const attrs = Array.isArray(target.targetAttribute) ? target.targetAttribute : [target.targetAttribute];
+export const calculateFitness = (genome: PlayerGenome, checkType: AttributeType | AttributeType[] | 'TOTAL_SUM' | 'NONE'): number => {
+    if (checkType === 'NONE') return 0;
+    if (checkType === 'TOTAL_SUM') {
+        return Object.values(genome.baseAttributes).reduce((a, b) => a + b, 0) +
+            Object.values(genome.mutationModifiers).reduce((a, b) => a + b, 0) +
+            Object.values(genome.tempAttributeModifiers).reduce((a, b) => a + b, 0);
+    }
+    const attrs = Array.isArray(checkType) ? checkType : [checkType];
     let totalStats = 0;
     attrs.forEach(attr => {
         const base = genome.baseAttributes?.[attr] || 0;
         const mod = genome.mutationModifiers?.[attr] || 0;
-        totalStats += base + mod;
+        const temp = genome.tempAttributeModifiers?.[attr] || 0;
+        totalStats += base + mod + temp;
     });
     return totalStats;
 };

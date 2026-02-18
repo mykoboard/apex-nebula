@@ -2,7 +2,7 @@ This is the definitive master document for **Project: Apex Nebula**. It incorpor
 
 ---
 
-# 📑 Project: Apex Nebula – Master Design Document
+#  Project: Apex Nebula – Master Design Document
 
 ## 🛰️ 1. General Description
 
@@ -10,7 +10,7 @@ This is the definitive master document for **Project: Apex Nebula**. It incorpor
 
 ---
 
-## 🧬 2. Initialization: Weight Setup
+##  2. Initialization: Weight Setup
 
 Players begin with a base pool of **16 points** to distribute across four attributes on their **Genome Console**.
 
@@ -26,7 +26,7 @@ Players begin with a base pool of **16 points** to distribute across four attrib
 
 ---
 
-## 🎲 3. The Hybrid Mechanics (Stats + Dice)
+##  3. The Hybrid Mechanics (Stats + Dice)
 
 ### A. The Mutation Phase (Internal Noise)
 
@@ -48,7 +48,7 @@ When harvesting or facing events, roll a **d6 Interference Die**.
 
 ---
 
-## 🛡️ 4. Stability: The Hardware Buffer
+##  4. Stability: The Hardware Buffer
 
 Stability (5 Points) represents your physical hardware's health.
 
@@ -61,7 +61,7 @@ Stability (5 Points) represents your physical hardware's health.
 
 ---
 
-## ⚔️ 5. Player Interaction: Selection & Recombination
+## 5. Player Interaction: Selection & Recombination
 
 When two players occupy the same hex, the active player chooses one of two paths:
 
@@ -83,7 +83,7 @@ A mutual exchange. Requires both players' consent.
 
 ---
 
-## 📉 6. The Downclock & Maintenance (Negative Feedback)
+## 6. The Downclock & Maintenance (Negative Feedback)
 
 To prevent "Overfitting" (having stats that are too expensive to keep), players must manage their **Metabolism**.
 
@@ -101,7 +101,7 @@ To prevent "Overfitting" (having stats that are too expensive to keep), players 
 
 ---
 
-## 🗺️ 7. Hex Sector Definitions
+## 7. Hex Sector Definitions
 
 |Tier |Total Tiles|Threshold|Standard Yield|Hybrid Yield (Double Check)|
 | --- | --- | --- | --- | --- |
@@ -139,19 +139,51 @@ Certainly! I've updated the manifest to include a **Quantity** column for each t
 
 ---
 
-## 🌪️ 8. The Event Deck (Selection Pressures)
+##  The Event Deck (Selection Pressures)
 
 Draw one card at the end of every round. All players are affected.
 
-* **Solar Flare (DEF 4):** Fail = -1 Stability.
-* **Logic Plague (LOG 5):** Fail = All stats -1 next turn.
-* **Weight Decay (Global):** All players must reduce their highest attribute by 1.
-* **Gravity Well (NAV 5):** Fail = Movement costs doubled next turn.
-* **Data Leach (SCN 4):** Fail = Lose 2 Data.
+This table organizes the final Event Deck, balancing environmental hazards with mechanics that prevent any one player from becoming an untouchable "Super-AI."
+
+### The Natural Selection Deck
+
+| Card Type | Event Name | Attribute Check | Threshold | Success / Failure Effect |
+| --- | --- | --- | --- | --- |
+| **Hazard** | **Solar Flare** | **DEFENSE** | 4 | **Fail:** Lose 1 Stability. |
+| **Hazard** | **Logic Plague** | **LOGIC** | 5 | **Fail:** All attributes are -1 during your next turn. |
+| **Hazard** | **Ion Storm** | **NAVIGATION** | 3 | **Fail:** Move 2 hexes in a random direction (Displaced). |
+| **Hazard** | **Data Leak** | **SENSORS** | 4 | **Fail:** Lose 2 Data Clusters. |
+| **Hazard** | **Gravity Well** | **NAVIGATION** | 5 | **Fail:** Movement cost for all hexes is doubled next turn. |
+| **Pressure** | **The Great Filter** | **TOTAL SUM** | **AVG + 2** | **Fail:** Immediate Hard Reboot. (AVG = sum of all player scores / count). |
+| **Pressure** | **Weight Decay** | **NONE** | N/A | **Global:** All players must reduce their highest attribute by 1 permanently. |
+| **Pressure** | **System Heat** | **DEFENSE** | 5 | **Fail:** Pay 1 Matter or lose 1 Stability. |
+| **Shift** | **Grid Re-Sync** | **NONE** | N/A | **Map Shift:** Priority Player swaps any two adjacent Tier 2 or Tier 3 tiles. |
+| **Shift** | **Space Fold** | **NAVIGATION** | 6 | **Success:** You may move to any adjacent hex for free immediately. |
+| **Shift** | **Core Drift** | **NONE** | N/A | **Map Shift:** The Singularity tile moves one hex toward the player with the lowest sum. |
+| **Apex Lead** | **Thermal Throttle** | **DEFENSE** | 6 | **Target:** Players with Sum 26+. **Fail:** Lose 2 Stability. |
+| **Apex Lead** | **Data Corruption** | **LOGIC** | 5 | **Target:** Player with Most Data. **Fail:** Lose **half** of your Data tokens. |
+| **Apex Lead** | **Resource Leach** | **SENSORS** | 5 | **Target:** Player with Most Matter. **Fail:** Lose 3 Matter tokens. |
+| **Apex Lead** | **System Bloat** | **LOGIC** | 6 | **Target:** Player with Highest Stat. **Fail:** That stat is permanently -1. |
+| **Apex Lead** | **Parasitic Drift** | **NONE** | N/A | **Transfer:** Player with highest sum gives 1 Data to player with lowest sum. |
+| **Apex Lead** | **Overfit Fragile** | **NAVIGATION** | 4 | **Target:** Players with any Stat of 8+. **Fail:** Lose 1 Stability. |
+| **Bonus** | **Deep Scan** | **SENSORS** | 6 | **Success:** Gain 1 Data. **Fail:** No penalty. |
+| **Bonus** | **Matter Vacuum** | **NONE** | N/A | **Global:** All players lose 1 Matter. If at 0 Matter, lose 1 Stability. |
+| **Bonus** | **Model Sync** | **LOGIC** | 4 | **Success:** Gain 1 **Insight Token** (Natural 6). |
 
 ---
 
-## 🏆 9. Winning the Game
+### Visualizing Selection Pressure
+
+The chart below illustrates how these events impact the population. While "Hazards" affect everyone, "Apex Lead" events act as a ceiling to prevent runaway leaders, and "The Great Filter" sets a floor that moves upward with the group.
+
+### Using this Deck
+
+* **Event Timing:** Draw one card at the end of the round, after all players have completed their Execution and Interaction phases.
+* **The "Priority" Choice:** For cards like **Grid Re-Sync**, the player currently holding the Priority Token (most energy-efficient/lowest sum) makes the decision.
+
+---
+
+## 9. Winning the Game
 
 To win, you must occupy **The Core**, have a total permanent attribute sum of **25+**, spend **10 Data**, and survive one final **Event Card** without losing Stability.
 

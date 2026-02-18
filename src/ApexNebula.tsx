@@ -10,7 +10,7 @@ import EventCard from './components/EventCard';
 import EventDeck from './components/EventDeck';
 import PhaseIndicator from './components/PhaseIndicator';
 
-import { Dna, Dice6, Trophy, Zap, Crown } from 'lucide-react';
+import { Dna, Dice6, Trophy, Crown, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const COLORS: Color[] = ['red', 'green', 'blue', 'yellow'];
@@ -40,17 +40,17 @@ const ApexNebula: React.FC<GameProps> = ({
 
     const [state, send] = useMachine(apexNebulaMachine, {
         input: {
-            // ... existing input props
             players,
             genomes: players.map(p => ({
                 playerId: p.id,
-                stability: 5,
+                stability: 3,
                 dataClusters: 0,
                 rawMatter: 0,
                 insightTokens: 0,
                 lockedSlots: [],
                 baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
                 mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
+                tempAttributeModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
                 cubePool: 12,
             })),
             pieces: players.map((p, i) => {
@@ -66,8 +66,6 @@ const ApexNebula: React.FC<GameProps> = ({
         },
     });
 
-
-
     const localPlayer = playerInfos.find(p => p.isLocal);
     const localGenome = state.context.genomes.find(g => g.playerId === localPlayer?.id);
     const activePlayerId = state.context.turnOrder[state.context.currentPlayerIndex];
@@ -75,29 +73,12 @@ const ApexNebula: React.FC<GameProps> = ({
     const isLocalPlayerTurn = localPlayer && activePlayerId === localPlayer.id;
     const otherPlayers = playerInfos.filter(p => !p.isLocal);
 
-    // Debugging state changes
-    useEffect(() => {
-        const activeId = state.context.turnOrder[state.context.currentPlayerIndex];
-        console.log('--- UI Render State ---');
-        console.log('Current Phase:', state.value);
-        console.log('Turn Order:', state.context.turnOrder);
-        console.log('Current Player Index:', state.context.currentPlayerIndex);
-        console.log('Active Player ID:', activeId);
-        console.log('Local Player ID:', localPlayer?.id);
-        console.log('Is Local Player Turn:', isLocalPlayerTurn);
-        console.log('Editable (setupPhase?):', state.matches('setupPhase'));
-    }, [state.value, localGenome?.cubePool, state.context.seed, state.context.currentPlayerIndex, state.context.turnOrder, isLocalPlayerTurn]);
-
     // WebRTC message handling
     useEffect(() => {
         const handleMessage = (data: string) => {
             try {
                 const message = JSON.parse(data);
-                console.log('Raw Message:', message);
-                console.log('isGameMessage check:', isGameMessage(message));
-
                 if (isGameMessage(message)) {
-                    console.log('Sending event to machine:', message.type, message.payload);
                     send({ type: message.type as any, ...message.payload });
                 }
             } catch (error) {
@@ -126,11 +107,9 @@ const ApexNebula: React.FC<GameProps> = ({
         }
     }, [state.context, isInitiator, connections]);
 
-    // Add to ledger on significant actions
     const handleAction = (actionType: string, payload: any) => {
         send({ type: actionType as any, ...payload });
 
-        // During setup, cube distribution is obfuscated (hide attribute)
         if (state.matches('setupPhase') && actionType === 'DISTRIBUTE_CUBES') {
             const { playerId, amount } = payload;
             onAddLedger({ type: actionType, payload: { playerId, amount } });
@@ -140,13 +119,10 @@ const ApexNebula: React.FC<GameProps> = ({
         onAddLedger({ type: actionType, payload });
     };
 
-
-
     const handleFinishTurn = () => {
         if (!localPlayer) return;
         handleAction('FINISH_TURN', { playerId: localPlayer.id });
     };
-
 
     const handleReset = () => {
         handleAction('RESET', {});
@@ -192,10 +168,8 @@ const ApexNebula: React.FC<GameProps> = ({
 
     return (
         <div className="min-h-screen p-8 flex flex-col space-y-12 bg-[#020617] text-slate-100 border-0 rounded-none overflow-x-hidden relative">
-            {/* Ambient Background Effect */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(168,85,247,0.1),transparent)] pointer-events-none" />
 
-            {/* Header */}
             <div className="flex justify-between items-center relative z-10">
                 <div className="flex flex-col">
                     <div className="flex items-center gap-4">
@@ -221,14 +195,35 @@ const ApexNebula: React.FC<GameProps> = ({
                 </div>
             </div>
 
-            {/* Phase Indicator */}
             <div className="relative z-10">
                 <PhaseIndicator currentPhase={state.context.gamePhase} round={state.context.round} />
             </div>
 
-            <div className="flex flex-col gap-12 relative z-10">
-                {/* Top Section: Navigation Grid */}
-                <div className="w-full space-y-6">
+            {/* Top Section: Event Protocol */}
+            <div className="relative z-10 space-y-6">
+                <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-2">
+                    <div className="w-1 h-3 bg-orange-500 rounded-full" />
+                    Event Deck & Protocol
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+                    <div className="md:col-span-3">
+                        <EventCard
+                            event={state.context.currentEvent}
+                        />
+                    </div>
+                    <div className="md:col-span-1">
+                        <EventDeck
+                            deck={state.context.eventDeck}
+                            discard={[]}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Main Section: Map and Local Sidebar */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10">
+                {/* Left: Map */}
+                <div className="lg:col-span-8 space-y-6">
                     <div className="flex items-center justify-between">
                         <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-2">
                             <div className="w-1 h-3 bg-purple-500 rounded-full" />
@@ -244,161 +239,80 @@ const ApexNebula: React.FC<GameProps> = ({
                         onHexClick={(hexId) => isLocalPlayerTurn && handleAction('MOVE_PLAYER', { playerId: localPlayer?.id, hexId })}
                         currentHexId={state.context.pieces.find(p => p.playerId === localPlayer?.id)?.hexId}
                         maxDistance={isLocalPlayerTurn &&
-                            ((localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) > (state.context.phenotypeActions[localPlayer?.id!]?.movesMade || 0))
+                            ((localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) + (localGenome?.tempAttributeModifiers.NAV || 0) > (state.context.phenotypeActions[localPlayer?.id!]?.movesMade || 0))
                             ? 1 : 0}
                     />
                 </div>
 
-                {/* Middle Section: Player Boards and Actions */}
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-12 items-start">
-                    {/* Left: Genome Matrix & Other Players */}
-                    <div className="xl:col-span-8 space-y-12">
-                        <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-indigo-500 uppercase flex items-center gap-2">
-                                Genome Console
-                                {state.context.priorityPlayerId === localPlayer?.id && (
-                                    <Crown className="w-3 h-3 text-yellow-500" />
-                                )}
-                            </h4>
-                            {localGenome && (
-                                <PlayerConsole
-                                    genome={localGenome}
-                                    editable={state.matches('setupPhase')}
-                                    setupLimit={state.matches('setupPhase') ? 6 : undefined}
-                                    onDistribute={(attr, amt) => handleAction('DISTRIBUTE_CUBES', { playerId: localPlayer?.id, attribute: attr, amount: amt })}
-                                />
-                            )}
-                        </div>
-
-                        {/* Other Players' Genomes */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-white/5">
-                            {state.context.genomes
-                                .filter(g => g.playerId !== localPlayer?.id)
-                                .map(genome => {
-                                    const player = state.context.players.find(p => p.id === genome.playerId);
-                                    if (!player) return null;
-                                    const playerTurnIdx = state.context.turnOrder.indexOf(genome.playerId);
-                                    const isFinished = state.matches('phenotypePhase')
-                                        ? playerTurnIdx < state.context.currentPlayerIndex
-                                        : genome.cubePool === 0;
-                                    const isReady = isFinished;
-                                    return (
-                                        <div key={genome.playerId} className="space-y-4">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="text-[10px] font-bold text-slate-500 uppercase">{player.name}'s Systems</div>
-                                                    {state.context.priorityPlayerId === player.id && (
-                                                        <Crown className="w-3 h-3 text-yellow-500" />
-                                                    )}
-                                                </div>
-                                                {isReady && (
-                                                    <div className="px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded text-[8px] font-black text-green-400 uppercase tracking-widest animate-pulse">
-                                                        Ready
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <PlayerConsole genome={genome} />
-                                            {state.matches('mutationPhase') && state.context.turnOrder[state.context.currentPlayerIndex] === genome.playerId && !state.context.mutationResults[genome.playerId] && (
-                                                <Button
-                                                    onClick={() => handleAction('INITIATE_MUTATION', {})}
-                                                    className="w-full mt-2 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 text-[10px] h-8 uppercase font-black tracking-widest"
-                                                >
-                                                    Simulate {player.name} Mutation
-                                                </Button>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                        </div>
-                    </div>
-
-                    {/* Right: Actions & Events */}
-                    <div className="xl:col-span-4 space-y-10">
-                        {/* Event Card */}
-                        <div className="space-y-6">
-                            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-2">
-                                <div className="w-1 h-3 bg-orange-500 rounded-full" />
-                                Event Deck & Protocol
-                            </h3>
-                            <EventCard event={state.context.currentEvent} />
-                            <EventDeck
-                                deck={state.context.eventDeck}
-                                discard={[]} // Discard state calculation could be added to machine context if needed
-                            />
-
-                        </div>
-
-                        {/* Action Panel */}
-                        <div className="space-y-6">
-                            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-2">
-                                <div className="w-1 h-3 bg-white/20 rounded-full" />
-                                Command Protocol
-                            </h3>
-                            <div className="bg-white/5 rounded-[2.5rem] p-8 border border-white/5 backdrop-blur-xl shadow-inner group transition-all hover:bg-white/[0.07]">
-                                <div className="flex items-center justify-between mb-8">
-                                    <h3 className="text-sm font-black uppercase tracking-[0.1em] text-white">
-                                        {isLocalPlayerTurn ? 'Awaiting Input' : `${currentPlayer?.name} 's Cycle`}
-                                    </h3 >
-                                    <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest px-3 py-1 bg-purple-500/10 rounded-full ring-1 ring-purple-500/30">
-                                        Phase: {state.context.gamePhase}
-                                    </div>
+                {/* Right: Sidebar (Command + Console) */}
+                <div className="lg:col-span-4 space-y-8">
+                    {/* Command Protocol */}
+                    <div className="space-y-4">
+                        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-2">
+                            <div className="w-1 h-3 bg-white/20 rounded-full" />
+                            Command Protocol
+                        </h3>
+                        <div className="bg-white/5 rounded-[2rem] p-6 border border-white/5 backdrop-blur-xl shadow-inner group transition-all hover:bg-white/[0.07]">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-sm font-black uppercase tracking-[0.1em] text-white">
+                                    {isLocalPlayerTurn ? 'Awaiting Input' : `${currentPlayer?.name}'s Cycle`}
+                                </h3>
+                                <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest px-3 py-1 bg-purple-500/10 rounded-full ring-1 ring-purple-500/30">
+                                    {state.context.gamePhase}
                                 </div>
+                            </div>
 
+                            <div className="space-y-4">
                                 {state.matches('setupPhase') && (
-                                    <p className="text-xs text-slate-400 leading-relaxed italic">
-                                        Distribute your 12 attribute cubes to initialize your genome's base configuration.
+                                    <p className="text-[10px] text-slate-400 leading-relaxed italic">
+                                        Distribute 12 cubes to initialize your configuration.
                                     </p>
                                 )}
 
                                 {state.matches('mutationPhase') && (
-                                    <div className="space-y-6">
+                                    <div className="space-y-4">
                                         <h5 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
                                             <Zap className="w-3 h-3" />
-                                            Stochastic Mutation Phase
+                                            Mutation Sync
                                         </h5>
-
                                         {Object.keys(state.context.mutationResults).length < state.context.players.length ? (
-                                            <div className="space-y-4">
-                                                <p className="text-xs text-slate-400 leading-relaxed italic">
-                                                    Systems are entering the nebula's high-radiation zone. {state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'It is your turn to initiate.' : `Awaiting ${state.context.players.find(p => p.id === state.context.turnOrder[state.context.currentPlayerIndex])?.name}...`}
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] text-slate-400 italic">
+                                                    Systems entering radiation zone. {state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'Initiate sequence.' : 'Awaiting turn...'}
                                                 </p>
                                                 <Button
                                                     onClick={() => handleAction('INITIATE_MUTATION', {})}
                                                     disabled={state.context.turnOrder[state.context.currentPlayerIndex] !== localPlayer?.id}
-                                                    className={`w-full h-12 uppercase font-black tracking-widest text-xs rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg ${state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id
+                                                    className={`w-full h-10 uppercase font-black tracking-widest text-[10px] rounded-xl transition-all flex items-center justify-center gap-2 ${state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id
                                                         ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
                                                         : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                                                         }`}
                                                 >
                                                     <Dice6 className="w-4 h-4" />
-                                                    {state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'Initiate Mutation' : 'Awaiting Turn...'}
+                                                    {state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'Initiate' : 'Awaiting...'}
                                                 </Button>
                                             </div>
                                         ) : (
-                                            <>
-                                                <div className="space-y-4">
+                                            <div className="space-y-4">
+                                                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                                                     {state.context.players.map(p => {
                                                         const res = state.context.mutationResults[p.id];
                                                         if (!res) return null;
                                                         return (
-                                                            <div key={p.id} className="bg-slate-900/50 p-3 rounded-xl border border-white/5 space-y-2">
+                                                            <div key={p.id} className="bg-slate-900/50 p-2 rounded-lg border border-white/5 space-y-1">
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{p.name}</span>
-                                                                    <div className="flex gap-1.5">
-                                                                        <div className="w-6 h-6 flex items-center justify-center bg-indigo-500/20 rounded border border-indigo-500/30 text-[10px] font-black text-indigo-400" title={`Attribute Roll: ${res.attrRoll}`}>
+                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase">{p.name}</span>
+                                                                    <div className="flex gap-1">
+                                                                        <div className="px-1 bg-indigo-500/20 rounded text-[8px] font-black text-indigo-400">
                                                                             {res.attrRoll}
                                                                         </div>
-                                                                        <div className="w-6 h-6 flex items-center justify-center bg-purple-500/20 rounded border border-purple-500/30 text-[10px] font-black text-purple-400" title={`Magnitude Roll: ${res.magRoll}`}>
-                                                                            {res.magRoll}
+                                                                        <div className="px-1 bg-purple-500/20 rounded text-[8px] font-black text-purple-400">
+                                                                            {res.magnitude > 0 ? '+' : ''}{res.magnitude}
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className={`text-xs font-black uppercase tracking-widest ${res.magnitude > 0 ? 'text-green-400' : res.magnitude < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                                                                        {res.attr}: {res.magnitude > 0 ? '+' : ''}{res.magnitude}
-                                                                    </div>
-                                                                    <div className="h-[1px] flex-1 bg-white/5" />
-                                                                    <span className="text-[8px] font-black text-slate-600 uppercase">Applied</span>
+                                                                <div className="text-[9px] font-black uppercase tracking-tight text-white/70">
+                                                                    {res.attr}: {res.magnitude > 0 ? '+' : ''}{res.magnitude}
                                                                 </div>
                                                             </div>
                                                         );
@@ -408,104 +322,167 @@ const ApexNebula: React.FC<GameProps> = ({
                                                     onClick={() => handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })}
                                                     disabled={state.context.confirmedPlayers.includes(localPlayer?.id || '')}
                                                     className={`w-full uppercase font-black tracking-widest text-[10px] h-10 rounded-xl transition-all ${state.context.confirmedPlayers.includes(localPlayer?.id || '')
-                                                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                                                        : 'bg-indigo-600 hover:bg-slate-700 text-white shadow-lg'
+                                                        ? 'bg-slate-800 text-slate-500'
+                                                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg'
                                                         }`}
                                                 >
-                                                    {state.context.confirmedPlayers.includes(localPlayer?.id || '') ? 'Awaiting System Confirmation...' : 'Confirm & Continue'}
+                                                    {state.context.confirmedPlayers.includes(localPlayer?.id || '') ? 'Confirmed' : 'Confirm Phase'}
                                                 </Button>
-                                            </>
+                                            </div>
                                         )}
                                     </div>
                                 )}
 
-                                <div className="flex flex-col gap-4">
-                                    {state.matches('setupPhase') && isLocalPlayerTurn && (
-                                        <div className="p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-center space-y-2">
-                                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
-                                                {localGenome?.cubePool! > 0 ? 'Allocating Neural Cubes...' : 'Distribution Finalized'}
-                                            </p>
-                                            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
-                                                {localGenome?.cubePool! > 0
-                                                    ? `Place ${localGenome?.cubePool} more cubes to proceed.`
-                                                    : 'Awaiting other sectors to initialize...'}
-                                            </p>
-                                        </div>
-                                    )}
-
-
-                                    {state.matches('phenotypePhase') && (
-                                        <>
-                                            <div className="space-y-4">
-                                                {isLocalPlayerTurn ? (
-                                                    <>
-                                                        <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-center space-y-2">
-                                                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
-                                                                Movement Phase Active
-                                                            </p>
-                                                            <p className="text-sm font-black text-white uppercase tracking-widest">
-                                                                {Math.max(0, (localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) - (state.context.phenotypeActions[localPlayer?.id!]?.movesMade || 0))} Units Remaining
-                                                            </p>
-                                                        </div>
-
-                                                        <Button
-                                                            onClick={handleFinishTurn}
-                                                            className="w-full h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-sm uppercase tracking-[0.2em] border border-white/10 transition-all"
-                                                        >
-                                                            Finalize Turn
-                                                        </Button>
-
-                                                    </>
-                                                ) : (
-                                                    <div className="p-6 bg-slate-900/50 rounded-2xl border border-white/5 text-center italic text-slate-500 text-[10px] uppercase tracking-widest">
-                                                        Awaiting Sector Turn...
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {state.context.lastHarvestResults.length > 0 && (
-                                                <div className="mt-4 space-y-2">
-                                                    <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2 pl-1">Last Extraction Result</div>
-                                                    {state.context.lastHarvestResults.map((res, i) => (
-                                                        <div key={i} className={`p-3 rounded-xl border flex items-center justify-between font-black text-[10px] uppercase tracking-widest ${res.success ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-                                                            <span>Check {i + 1} ({res.attribute})</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <Dice6 className="w-3 h-3" />
-                                                                <span>Roll {res.roll} ({res.magnitude > 0 ? '+1' : res.magnitude < 0 ? '-1' : '0'})</span>
-                                                                <span className="ml-2 px-1.5 py-0.5 bg-black/30 rounded border border-white/5">{res.success ? 'Success' : 'Failure'}</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                {state.matches('phenotypePhase') && (
+                                    <div className="space-y-4">
+                                        {isLocalPlayerTurn ? (
+                                            <div className="space-y-3">
+                                                <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-center">
+                                                    <p className="text-[10px] font-black text-indigo-400 uppercase">Movement Active</p>
+                                                    <p className="text-xs font-black text-white">
+                                                        {Math.max(0, (localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) + (localGenome?.tempAttributeModifiers.NAV || 0) - (state.context.phenotypeActions[localPlayer?.id!]?.movesMade || 0))} Units
+                                                    </p>
                                                 </div>
-                                            )}
-                                        </>
-                                    )}
+                                                <Button
+                                                    onClick={handleFinishTurn}
+                                                    className="w-full h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] uppercase tracking-widest border border-white/10"
+                                                >
+                                                    Finalize Turn
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="p-4 bg-slate-900/50 rounded-xl border border-white/5 text-center italic text-slate-500 text-[10px] uppercase">
+                                                Awaiting Turn...
+                                            </div>
+                                        )}
 
-                                    {state.matches('optimizationPhase') && isLocalPlayerTurn && localGenome && (
-                                        <div className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800 text-center">
-                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                                Optimization Window Open
-                                            </p>
+                                        {state.context.lastHarvestResults.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-[8px] font-black text-slate-500 uppercase">Last Extraction</div>
+                                                {state.context.lastHarvestResults.map((res, i) => (
+                                                    <div key={i} className={`p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase ${res.success ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                                                        <span>{res.attribute}</span>
+                                                        <div className="flex items-center gap-1">
+                                                            <span>Roll {res.roll}</span>
+                                                            <span className="px-1 bg-black/30 rounded">{res.success ? 'OK' : 'FAIL'}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {state.matches('environmentalPhase') && (
+                                    <div className="space-y-4">
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                                            {Object.entries(state.context.lastEventResults || {}).map(([pid, res]) => {
+                                                const p = state.context.players.find(pl => pl.id === pid);
+                                                if (!p) return null;
+                                                return (
+                                                    <div key={pid} className={`p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase tracking-tight ${res.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                                                        <span className="truncate max-w-[80px]">{p.name}</span>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Dice6 className="w-3 h-3 opacity-50" />
+                                                            <span>{res.roll}</span>
+                                                            <span className="opacity-50 text-[7px]">({res.modifier >= 0 ? '+' : ''}{res.modifier})</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    )}
+                                        {isInitiator && (
+                                            <Button
+                                                onClick={() => handleAction('NEXT_PHASE', {})}
+                                                className="w-full h-10 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-orange-500/10"
+                                            >
+                                                Resolve Event Protocol
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
 
-                                </div>
+                                {state.matches('competitivePhase') && isInitiator && (
+                                    <Button
+                                        onClick={() => handleAction('NEXT_PHASE', {})}
+                                        className="w-full h-12 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-[10px] uppercase tracking-[0.2em]"
+                                    >
+                                        Resolve Competitive
+                                    </Button>
+                                )}
                             </div>
                         </div>
+                    </div>
+
+                    {/* Local Genome Console */}
+                    <div className="space-y-4">
+                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                            <div className="w-1 h-3 bg-indigo-500 rounded-full" />
+                            Local System
+                            {state.context.priorityPlayerId === localPlayer?.id && (
+                                <Crown className="w-3 h-3 text-yellow-500" />
+                            )}
+                        </h4>
+                        {localGenome && (
+                            <PlayerConsole
+                                genome={localGenome}
+                                editable={state.matches('setupPhase') || localGenome.cubePool > 0}
+                                setupLimit={state.matches('setupPhase') ? 6 : undefined}
+                                onDistribute={(attr, amt) => handleAction('DISTRIBUTE_CUBES', { playerId: localPlayer?.id, attribute: attr, amount: amt })}
+                            />
+                        )}
                     </div>
                 </div>
             </div>
 
-            {/* Footer */}
-            <div className="mt-auto w-full flex justify-between items-center pt-12 border-t border-white/5 relative z-10">
+            {/* Bottom Section: Other Players */}
+            <div className="space-y-8 relative z-10 pt-12 border-t border-white/5">
+                <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-2">
+                    <div className="w-1 h-3 bg-slate-700 rounded-full" />
+                    External Sectors
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {state.context.genomes
+                        .filter(g => g.playerId !== localPlayer?.id)
+                        .map(genome => {
+                            const player = state.context.players.find(p => p.id === genome.playerId);
+                            if (!player) return null;
+                            const playerTurnIdx = state.context.turnOrder.indexOf(genome.playerId);
+                            const isFinished = state.matches('phenotypePhase')
+                                ? playerTurnIdx < state.context.currentPlayerIndex
+                                : genome.cubePool === 0;
+
+                            return (
+                                <div key={genome.playerId} className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="text-[10px] font-bold text-slate-500 uppercase">{player.name}</div>
+                                            {state.context.priorityPlayerId === player.id && (
+                                                <Crown className="w-3 h-3 text-yellow-500" />
+                                            )}
+                                        </div>
+                                        {isFinished && (
+                                            <div className="px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded text-[8px] font-black text-green-400 uppercase">
+                                                Ready
+                                            </div>
+                                        )}
+                                    </div>
+                                    <PlayerConsole genome={genome} />
+                                </div>
+                            );
+                        })}
+                </div>
+            </div>
+
+            <div className="mt-auto w-full flex justify-between items-center pt-8 border-t border-white/5 relative z-10 opacity-50">
                 <div className="flex gap-4">
                     <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                    <p className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.4em]">
+                    <p className="text-[8px] font-bold text-slate-700 uppercase tracking-[0.4em]">
                         APEX-OS // NODE_CONNECTED
                     </p>
                 </div>
-                <p className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.4em]">
-                    Build revision 2026.02.16
+                <p className="text-[8px] font-bold text-slate-700 uppercase tracking-[0.4em]">
+                    Build 2026.02.18
                 </p>
             </div>
         </div>

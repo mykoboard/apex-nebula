@@ -33,7 +33,7 @@ const PlayerConsole: React.FC<PlayerConsoleProps> = ({ genome, onDistribute, edi
                     <div className="flex items-center gap-2 mt-1">
                         <Heart className="w-3 h-3 text-red-500 fill-red-500/20" />
                         <div className="flex gap-1">
-                            {Array.from({ length: 5 }).map((_, i) => (
+                            {Array.from({ length: 3 }).map((_, i) => (
                                 <div
                                     key={i}
                                     className={`w-3 h-3 rounded-sm border transition-all ${i < genome.stability

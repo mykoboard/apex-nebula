@@ -39,16 +39,44 @@ export interface PlayerGenome {
     lockedSlots: number[]; // Future use for frozen attributes
     baseAttributes: Record<AttributeType, number>; // Console cubes (0-10)
     mutationModifiers: Record<AttributeType, number>; // Stochastic noise (+/-)
+    tempAttributeModifiers: Record<AttributeType, number>; // Environmental effects (-/+)
     cubePool: number; // Remaining cubes to distribute during setup
 }
 
+export type EventCardType = 'Hazard' | 'Pressure' | 'Shift' | 'Apex Lead' | 'Bonus';
+export type EventCheckType = AttributeType | 'TOTAL_SUM' | 'NONE';
+
 export interface EnvironmentalEvent {
     id: string;
+    type: EventCardType;
     name: string;
     description: string;
-    targetAttribute: AttributeType;
-    threshold: number;
-    penalty: number | { type: 'stability' | 'data' | 'matter' | 'displacement' | 'mutation' | 'blindness', amount: number };
+    checkType: EventCheckType;
+    threshold: number | 'AVG+2';
+    effects: {
+        onSuccess?: EventEffect;
+        onFailure?: EventEffect;
+        global?: EventEffect;
+    };
+}
+
+export interface EventEffect {
+    type:
+    | 'stability'
+    | 'data'
+    | 'matter'
+    | 'displacement'
+    | 'movement_cost'
+    | 'stat_mod_temp'
+    | 'stat_mod_perm'
+    | 'hard_reboot'
+    | 'map_shift'
+    | 'transfer'
+    | 'gain_insight';
+    amount?: number;
+    attribute?: AttributeType;
+    target?: 'self' | 'all' | 'priority' | 'lowest_sum' | 'most_data' | 'most_matter' | 'highest_stat' | 'sum_26_plus' | 'stat_8_plus';
+    details?: any;
 }
 
 export interface Player {
@@ -80,6 +108,7 @@ export interface ApexNebulaContext {
     lastHarvestResults: { success: boolean; attribute: string; roll: number; magnitude: number }[];
     phenotypeActions: Record<string, { movesMade: number; harvestDone: boolean }>;
     confirmedPlayers: string[];
+    lastEventResults?: Record<string, { roll: number; modifier: number; success: boolean }>;
 }
 
 export type ApexNebulaEvent =
@@ -92,5 +121,6 @@ export type ApexNebulaEvent =
     | { type: 'CONFIRM_PHASE'; playerId: string }
     | { type: 'HUSTLE'; attackerId: string; defenderId: string; category: string }
     | { type: 'NEXT_PHASE' }
+    | { type: 'FORCE_EVENT'; eventId: string }
     | { type: 'START_GAME'; seed?: number }
     | { type: 'RESET' };
