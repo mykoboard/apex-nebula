@@ -7,7 +7,7 @@ import {
 } from './types';
 import { createHexGrid } from './components/HexGrid';
 import { INITIAL_EVENT_DECK } from './components/EventDeck';
-import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded } from './utils';
+import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded, calculateMaintenanceCost } from './utils';
 
 const EMPTY_MODS = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
 
@@ -811,8 +811,19 @@ export const apexNebulaMachine = createMachine({
             if (context.confirmedPlayers.includes(event.playerId)) return {};
             const newConfirmed = [...context.confirmedPlayers, event.playerId];
             console.log('New confirmed list:', newConfirmed);
+
+            // Deduct matter immediately upon confirming
+            const playerGenome = context.genomes.find(g => g.playerId === event.playerId);
+            const cost = playerGenome ? calculateMaintenanceCost(playerGenome) : 0;
+            const newGenomes = context.genomes.map(g =>
+                g.playerId === event.playerId
+                    ? { ...g, rawMatter: Math.max(0, g.rawMatter - cost) }
+                    : g
+            );
+
             return {
-                confirmedPlayers: newConfirmed
+                confirmedPlayers: newConfirmed,
+                genomes: newGenomes
             };
         }),
 
@@ -869,15 +880,16 @@ export const apexNebulaMachine = createMachine({
 
         finalizeOptimization: assign(({ context }) => {
             // Maintenance: Stability -> 3, Data/Matter cap at 2, Reset Mutations
-            // Note: User mentioned "pay required matter", implying 1 matter for maintenance
             return {
-                genomes: context.genomes.map(g => ({
-                    ...g,
-                    stability: 3,
-                    mutationModifiers: { ...EMPTY_MODS },
-                    dataClusters: Math.min(2, g.dataClusters),
-                    rawMatter: Math.max(0, Math.min(2, g.rawMatter - 1)), // Subtract 1 for maintenance, then cap
-                })),
+                genomes: context.genomes.map(g => {
+                    return {
+                        ...g,
+                        stability: 3,
+                        mutationModifiers: { ...EMPTY_MODS },
+                        dataClusters: Math.min(2, g.dataClusters),
+                        rawMatter: Math.min(2, g.rawMatter), // Cap at 2, deduction already happened in confirmPhase
+                    };
+                }),
                 lastHarvestResults: []
             };
         }),

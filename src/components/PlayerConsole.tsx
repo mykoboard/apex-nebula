@@ -1,5 +1,6 @@
 import React from 'react';
 import { AttributeType, PlayerGenome } from '../types';
+import { calculateMaintenanceCost } from '../utils';
 
 import { Database, Zap, Shield, Cpu, Box, HardDrive, Heart } from 'lucide-react';
 
@@ -19,7 +20,7 @@ const PlayerConsole: React.FC<PlayerConsoleProps> = ({ genome, onDistribute, edi
     ];
 
     const allocatedPoints = Object.values(genome.baseAttributes).reduce((sum, val) => sum + val, 0);
-    const requiredMatter = allocatedPoints >= 29 ? 3 : allocatedPoints >= 21 ? 2 : allocatedPoints >= 16 ? 1 : 0;
+    const requiredMatter = calculateMaintenanceCost(genome);
 
     return (
         <div className="bg-slate-900/90 border-2 border-slate-800 rounded-xl p-6 shadow-2xl backdrop-blur-md w-full max-w-2xl">
@@ -91,13 +92,19 @@ const PlayerConsole: React.FC<PlayerConsoleProps> = ({ genome, onDistribute, edi
                                             const currentValue = genome.baseAttributes?.[attr.type] ?? 0;
                                             if (targetValue === currentValue) return;
 
-                                            // During Optimization (no setupLimit), forbid reductions
-                                            if (!setupLimit && targetValue < currentValue) return;
+                                            // During setupLimit (Setup Phase), allow free reallocation (reductions too)
+                                            // During Optimization (no setupLimit), reductions mean pruning and MUST only happen 1 at a time (click immediate previous level)
+                                            if (!setupLimit && targetValue < currentValue) {
+                                                if (targetValue === currentValue - 1) {
+                                                    onDistribute?.(attr.type, -1);
+                                                }
+                                                return; // Disallow pruning more than 1 at a time
+                                            }
 
                                             onDistribute?.(attr.type, targetValue - currentValue);
                                         }}
                                         className={`flex-1 h-full rounded-sm border transition-all duration-300 relative group/slot
-                                            ${editable && (setupLimit ? i < setupLimit : i >= (genome.baseAttributes?.[attr.type] ?? 0))
+                                            ${editable && (setupLimit ? i < setupLimit : i >= (genome.baseAttributes?.[attr.type] ?? 0) || i === (genome.baseAttributes?.[attr.type] ?? 0) - 1)
                                                 ? 'cursor-pointer hover:ring-2 hover:ring-white/30 hover:scale-[1.05] hover:z-10'
                                                 : 'cursor-not-allowed opacity-40'} 
                                             ${i < (genome.baseAttributes?.[attr.type] ?? 0)

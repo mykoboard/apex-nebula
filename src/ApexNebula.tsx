@@ -3,6 +3,7 @@ import { useMachine } from '@xstate/react';
 import { GameProps, createGameMessage, isGameMessage } from '@mykoboard/integration';
 import { apexNebulaMachine } from './apexNebulaMachine';
 import { Color, Player, AttributeType } from './types';
+import { calculateMaintenanceCost } from './utils';
 
 import HexGrid from './components/HexGrid';
 import PlayerConsole from './components/PlayerConsole';
@@ -463,22 +464,27 @@ const ApexNebula: React.FC<GameProps> = ({
                                         </div>
 
                                         <div className="pt-2">
-                                            <Button
-                                                onClick={() => handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })}
-                                                disabled={state.context.confirmedPlayers.includes(localPlayer?.id || '')}
-                                                className={`w-full h-12 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${state.context.confirmedPlayers.includes(localPlayer?.id || '')
-                                                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                                                    : (localGenome?.rawMatter || 0) >= 1
-                                                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                                                        : 'bg-red-900/40 text-red-400 border border-red-500/20'
-                                                    }`}
-                                            >
-                                                {state.context.confirmedPlayers.includes(localPlayer?.id || '')
-                                                    ? 'Maint Sequence Active'
-                                                    : (localGenome?.rawMatter || 0) >= 1
-                                                        ? 'Finalize (Pay 1 Matter)'
-                                                        : 'Insufficient Matter'}
-                                            </Button>
+                                            {(() => {
+                                                const requiredCost = localGenome ? calculateMaintenanceCost(localGenome) : 1;
+                                                return (
+                                                    <Button
+                                                        onClick={() => handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })}
+                                                        disabled={state.context.confirmedPlayers.includes(localPlayer?.id || '')}
+                                                        className={`w-full h-12 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${state.context.confirmedPlayers.includes(localPlayer?.id || '')
+                                                            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                                            : (localGenome?.rawMatter || 0) >= requiredCost
+                                                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                                                : 'bg-red-900/40 text-red-400 border border-red-500/20'
+                                                            }`}
+                                                    >
+                                                        {state.context.confirmedPlayers.includes(localPlayer?.id || '')
+                                                            ? 'Maint Sequence Active'
+                                                            : (localGenome?.rawMatter || 0) >= requiredCost
+                                                                ? `Finalize (Pay ${requiredCost} Matter)`
+                                                                : 'Insufficient Matter'}
+                                                    </Button>
+                                                );
+                                            })()}
                                             <p className="text-[7px] text-slate-500 text-center mt-2 uppercase opacity-50">
                                                 Resets Stability to 3 | Caps Data/Matter at 2
                                             </p>
@@ -503,7 +509,13 @@ const ApexNebula: React.FC<GameProps> = ({
                                 genome={localGenome}
                                 editable={state.matches('setupPhase') || localGenome.cubePool > 0 || state.matches('optimizationPhase')}
                                 setupLimit={state.matches('setupPhase') ? 6 : undefined}
-                                onDistribute={(attr, amt) => handleAction('DISTRIBUTE_CUBES', { playerId: localPlayer?.id, attribute: attr, amount: amt })}
+                                onDistribute={(attr, amt) => {
+                                    if (amt < 0 && state.matches('optimizationPhase')) {
+                                        handleAction('PRUNE_ATTRIBUTE', { playerId: localPlayer?.id, attribute: attr });
+                                    } else {
+                                        handleAction('DISTRIBUTE_CUBES', { playerId: localPlayer?.id, attribute: attr, amount: amt });
+                                    }
+                                }}
                             />
                         )}
                     </div>
