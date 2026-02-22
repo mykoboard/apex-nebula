@@ -4,7 +4,7 @@
 Proposed
 
 ## Context
-In the early "Setup Phase" of Apex Nebula, players distribute 16 points among four core attributes (NAV, LOG, DEF, SCN). In a decentralized, local-first environment, real-time synchronization of every point change can be unnecessarily "chatty" and might reveal tactical intent before the game officially begins.
+In the early "Setup Phase" of Apex Nebula, players distribute 12 points among four core attributes (NAV, LOG, DEF, SCN). In a decentralized, local-first environment, real-time synchronization of every point change can be unnecessarily "chatty" and might reveal tactical intent before the game officially begins.
 
 ## Decision
 We will implement a multi-stage synchronization flow for the Setup Phase:

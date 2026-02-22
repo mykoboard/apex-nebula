@@ -12,12 +12,13 @@ The Phenotype Phase is the primary interaction phase where players move across t
     - Movement is not a single teleport but a series of individual moves to adjacent tiles.
     - The maximum number of moves is equal to the `NAV` attribute (Base + Mutation).
     - `MOVE_PLAYER` events are restricted to Distance=1.
+    - Movement costs vary based on the destination tile: standard tiles cost **1 NAV**, while Double Award tiles cost **2 NAV** to enter.
 3. **Harvest-on-Entry**:
     - A fitness check is triggered automatically every time a player moves into a tile.
     - The check result determines reward or stability loss *before* the player can proceed with their next move.
 4. **Tile-Specific Harvest Rules**:
-    - **Standard Tiles**: Single check. Success awards yields; Failure costs 1 Stability.
-    - **Double Award Tiles** (Both Matter and Data > 0): Two independent checks. The first for Matter, second for Data. Stability is lost for each failed check.
+    - **Standard Tiles**: Single check. Success awards yields; Failure costs 1 Stability. Requires 1 NAV point to enter.
+    - **Double Award Tiles** (Both Matter and Data > 0): Two independent checks. The first for Matter, second for Data. Stability is lost for each failed check. Requires 2 NAV points to enter.
     - **Multi-Attribute Tiles** (Array of attributes): Sequential checks. Success for ALL attributes is required to gain any resources. Failure in any check costs 1 Stability.
     - **Singularity Tiles**: Requires 10 Data Clusters to enter. This amount is immediately consumed as an entry fee. Successfully passing the check immediately ends all remaining movement points for that turn.
 5. **Round Initialization**:

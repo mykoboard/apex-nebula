@@ -58,5 +58,5 @@ export const shuffleSeeded = <T>(array: T[], prng: () => number): T[] => {
 // Helper: Calculate Optimization Phase Maintenance Cost
 export const calculateMaintenanceCost = (genome: PlayerGenome): number => {
     const totalStats = Object.values(genome.baseAttributes).reduce((a, b) => a + b, 0);
-    return 1 + Math.max(0, Math.floor((totalStats - 16) / 2));
+    return 1 + Math.max(0, Math.floor((totalStats - 12) / 2));
 };

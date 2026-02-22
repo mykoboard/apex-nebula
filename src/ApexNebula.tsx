@@ -52,7 +52,7 @@ const ApexNebula: React.FC<GameProps> = ({
                 baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
                 mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
                 tempAttributeModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
-                cubePool: 12,
+                cubePool: 8,
             })),
             pieces: players.map((p, i) => {
                 const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];

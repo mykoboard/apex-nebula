@@ -15,8 +15,8 @@ The Optimization Phase (Phase 6) serves as the "cleanup and maintenance" stage o
     - **Attribute Pruning**: Players can reduce a Base Attribute by 1 level (minimum 1) to gain 2 Matter. This enables emergency repairs or pivoting strategies. This is performed natively by clicking on the previously acquired attribute level directly on the Genome Console.
 2. **Round Maintenance Cost**:
     - A player must pay **Maintenance Matter** to finalize their optimization and systems check.
-    - **Dynamic Cost Scaling:** Base starting cost is 1 Matter for up to 16 total base attribute points. For every 2 points over 16, the cost increases by 1 extra Matter.
-        - Example: 16 points -> 1 Matter, 18 points -> 2 Matter, 20 points -> 3 Matter.
+    - **Dynamic Cost Scaling:** Base starting cost is 1 Matter for up to 12 total base attribute points. For every 2 points over 12, the cost increases by 1 extra Matter.
+        - Example: 12 points -> 1 Matter, 14 points -> 2 Matter, 16 points -> 3 Matter.
     - If a player lacks Matter, they must prune an attribute to afford the maintenance.
 3. **System Reset**:
     - Upon finalizing the phase (Maintenance), the player's Stability is automatically restored to **3**.

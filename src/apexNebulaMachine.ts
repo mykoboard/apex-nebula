@@ -420,17 +420,17 @@ export const apexNebulaMachine = createMachine({
                     hasPassedSingularity: g.hasPassedSingularity || passedSingularity
                 };
             });
-
             const currentActions = context.phenotypeActions[playerId] || { movesMade: 0, harvestDone: false };
 
             // Re-calculate NAV for the player to exhaust points if Singularity passed
             const nav = (genome.baseAttributes['NAV'] || 0) + (genome.mutationModifiers['NAV'] || 0);
+            const navCost = isDoubleAward ? 2 : 1;
 
             const newPhenotypeActions = {
                 ...context.phenotypeActions,
                 [playerId]: {
                     ...currentActions,
-                    movesMade: targetHex.type === 'Singularity' && !anyFailure ? Math.max(nav, currentActions.movesMade + 1) : currentActions.movesMade + 1,
+                    movesMade: targetHex.type === 'Singularity' && !anyFailure ? Math.max(nav, currentActions.movesMade + navCost) : currentActions.movesMade + navCost,
                     harvestDone: true
                 }
             };
@@ -453,7 +453,7 @@ export const apexNebulaMachine = createMachine({
                             dataClusters: 1,
                             rawMatter: 0,
                             baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
-                            cubePool: 12,
+                            cubePool: 8,
                         };
                     }
                     return g;
@@ -609,7 +609,7 @@ export const apexNebulaMachine = createMachine({
                             newGenome.dataClusters = 1;
                             newGenome.rawMatter = 0;
                             newGenome.baseAttributes = { NAV: 1, LOG: 1, DEF: 1, SCN: 1 };
-                            newGenome.cubePool = 12;
+                            newGenome.cubePool = 8;
                         }
                         break;
                     case 'gain_insight':
@@ -633,7 +633,7 @@ export const apexNebulaMachine = createMachine({
                     result.dataClusters = 1;
                     result.rawMatter = 0;
                     result.baseAttributes = { NAV: 1, LOG: 1, DEF: 1, SCN: 1 };
-                    result.cubePool = 12;
+                    result.cubePool = 8;
                 }
                 return result;
             };
@@ -903,7 +903,7 @@ export const apexNebulaMachine = createMachine({
                 baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
                 mutationModifiers: { ...EMPTY_MODS },
                 tempAttributeModifiers: { ...EMPTY_MODS },
-                cubePool: 12,
+                cubePool: 8,
                 hasPassedSingularity: false,
             })),
             pieces: context.players.map((p, i) => {
@@ -982,12 +982,14 @@ export const apexNebulaMachine = createMachine({
                 return false;
             }
 
-            // 4. NAV check (movesMade < NAV)
+            // 4. NAV check (movesMade + moveCost <= NAV)
             const nav = (genome.baseAttributes['NAV'] || 0) + (genome.mutationModifiers['NAV'] || 0);
             const actions = context.phenotypeActions[event.playerId] || { movesMade: 0, harvestDone: false };
+            const isDoubleAward = targetHex.yield.matter > 0 && targetHex.yield.data > 0;
+            const moveCost = isDoubleAward ? 2 : 1;
 
-            if (actions.movesMade >= nav) {
-                console.log(`Guard: canMove failed - no moves left. Moves made: ${actions.movesMade}, NAV: ${nav}`);
+            if (actions.movesMade + moveCost > nav) {
+                console.log(`Guard: canMove failed - not enough NAV. Moves made: ${actions.movesMade}, Cost: ${moveCost}, NAV: ${nav}`);
                 return false;
             }
 
