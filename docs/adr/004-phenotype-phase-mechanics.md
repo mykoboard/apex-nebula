@@ -19,6 +19,7 @@ The Phenotype Phase is the primary interaction phase where players move across t
     - **Standard Tiles**: Single check. Success awards yields; Failure costs 1 Stability.
     - **Double Award Tiles** (Both Matter and Data > 0): Two independent checks. The first for Matter, second for Data. Stability is lost for each failed check.
     - **Multi-Attribute Tiles** (Array of attributes): Sequential checks. Success for ALL attributes is required to gain any resources. Failure in any check costs 1 Stability.
+    - **Singularity Tiles**: Requires 10 Data Clusters to enter. This amount is immediately consumed as an entry fee. Successfully passing the check immediately ends all remaining movement points for that turn.
 5. **Round Initialization**:
     - At the start of each Phenotype phase, all player move counts are reset to zero.
     - Available move units for the round are dynamically calculated: `NAV (Base) + Mutation Modifiers`.

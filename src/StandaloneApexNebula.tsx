@@ -126,15 +126,7 @@ const StandaloneApexNebula: React.FC = () => {
                     </button>
                 </div>
                 <div className="flex gap-1">
-                    <button
-                        onClick={() => {
-                            const message = { namespace: 'game', type: 'INITIATE_MUTATION', payload: {}, senderId: 'debug' };
-                            (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
-                        }}
-                        className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors flex-1"
-                    >
-                        Beta AI Mutation
-                    </button>
+
                     <button
                         onClick={() => {
                             const message = { namespace: 'game', type: 'CONFIRM_PHASE', payload: { playerId: 'player2' }, senderId: 'debug' };
@@ -144,15 +136,7 @@ const StandaloneApexNebula: React.FC = () => {
                     >
                         Beta AI Confirm
                     </button>
-                    <button
-                        onClick={() => {
-                            const message = { namespace: 'game', type: 'NEXT_PHASE', payload: {}, senderId: 'debug' };
-                            (mockConnections[0] as any).listeners.forEach((l: any) => l(JSON.stringify(message)));
-                        }}
-                        className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors flex-1"
-                    >
-                        Beta AI Competitive
-                    </button>
+
                     <button
                         onClick={() => {
                             const message = { namespace: 'game', type: 'FINISH_TURN', payload: { playerId: 'player2' }, senderId: 'debug' };

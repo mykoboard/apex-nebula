@@ -83,18 +83,10 @@ export const apexNebulaMachine = createMachine({
                     currentPlayerIndex: 0,
                     confirmedPlayers: []
                 }),
-                () => console.log('Machine State: mutationPhase')
+                'applyAllMutations',
+                () => console.log('Machine State: mutationPhase (Mutations Auto-Applied)')
             ],
             on: {
-                INITIATE_MUTATION: [
-                    {
-                        actions: 'applyMutations',
-                        guard: 'isLastMutationRoll',
-                    },
-                    {
-                        actions: ['applyMutations', 'nextMutationPlayer'],
-                    }
-                ],
                 CONFIRM_PHASE: {
                     actions: 'confirmPhase',
                 },
@@ -269,30 +261,22 @@ export const apexNebulaMachine = createMachine({
             };
         }),
 
-        nextMutationPlayer: assign(({ context }) => ({
-            currentPlayerIndex: context.currentPlayerIndex + 1
-        })),
-
-        applyMutations: assign(({ context }) => {
-            const activePlayerId = context.turnOrder[context.currentPlayerIndex];
-            const seed = (context.seed ?? 12345) + context.round + context.currentPlayerIndex;
-            const prng = createPRNG(seed);
+        applyAllMutations: assign(({ context }) => {
             const attributeMap: AttributeType[] = ['NAV', 'LOG', 'DEF', 'SCN'];
+            const newResults: Record<string, any> = {};
 
-            console.log(`Applying mutation for ${activePlayerId} using seed offset ${context.currentPlayerIndex}`);
+            const newGenomes = context.genomes.map((g, index) => {
+                // Ensure determinism by including the player's intrinsic index along with round & seed
+                const seed = (context.seed ?? 12345) + context.round + index;
+                const prng = createPRNG(seed);
 
-            const attrRoll = rollSeededDice(prng, 4);
-            const attr = attributeMap[attrRoll - 1];
-            const magRoll = rollSeededDice(prng, 6);
-            const magnitude = magRoll <= 2 ? -1 : (magRoll >= 5 ? 1 : 0);
+                const attrRoll = rollSeededDice(prng, 4);
+                const attr = attributeMap[attrRoll - 1];
+                const magRoll = rollSeededDice(prng, 6);
+                const magnitude = magRoll <= 2 ? -1 : (magRoll >= 5 ? 1 : 0);
 
-            const newResults = {
-                ...context.mutationResults,
-                [activePlayerId]: { attr, magnitude, attrRoll, magRoll }
-            };
+                newResults[g.playerId] = { attr, magnitude, attrRoll, magRoll };
 
-            const newGenomes = context.genomes.map(g => {
-                if (g.playerId !== activePlayerId) return g;
                 return {
                     ...g,
                     mutationModifiers: {
@@ -301,6 +285,8 @@ export const apexNebulaMachine = createMachine({
                     }
                 };
             });
+
+            console.log(`Applied mutations for all players:`, newResults);
 
             return { genomes: newGenomes, mutationResults: newResults };
         }),
@@ -423,16 +409,31 @@ export const apexNebulaMachine = createMachine({
 
                 const passedSingularity = targetHex.type === 'Singularity' && !anyFailure;
 
+                // Singularity requires 10 data clusters and consumes them immediately.
+                const singularityCost = targetHex.type === 'Singularity' ? 10 : 0;
+
                 return {
                     ...g,
                     rawMatter: g.rawMatter + (isDoubleAward ? (successMatter ? targetHex.yield.matter : 0) : (!anyFailure ? targetHex.yield.matter : 0)),
-                    dataClusters: g.dataClusters + (isDoubleAward ? (successData ? targetHex.yield.data : 0) : (!anyFailure ? targetHex.yield.data : 0)),
+                    dataClusters: Math.max(0, g.dataClusters - singularityCost + (isDoubleAward ? (successData ? targetHex.yield.data : 0) : (!anyFailure ? targetHex.yield.data : 0))),
                     stability: Math.max(0, g.stability - stabilityLoss),
                     hasPassedSingularity: g.hasPassedSingularity || passedSingularity
                 };
             });
 
             const currentActions = context.phenotypeActions[playerId] || { movesMade: 0, harvestDone: false };
+
+            // Re-calculate NAV for the player to exhaust points if Singularity passed
+            const nav = (genome.baseAttributes['NAV'] || 0) + (genome.mutationModifiers['NAV'] || 0);
+
+            const newPhenotypeActions = {
+                ...context.phenotypeActions,
+                [playerId]: {
+                    ...currentActions,
+                    movesMade: targetHex.type === 'Singularity' && !anyFailure ? Math.max(nav, currentActions.movesMade + 1) : currentActions.movesMade + 1,
+                    harvestDone: true
+                }
+            };
 
             return {
                 pieces: newPieces,
@@ -458,10 +459,7 @@ export const apexNebulaMachine = createMachine({
                     return g;
                 }),
                 lastHarvestResults: results,
-                phenotypeActions: {
-                    ...context.phenotypeActions,
-                    [playerId]: { ...currentActions, movesMade: currentActions.movesMade + 1 }
-                }
+                phenotypeActions: newPhenotypeActions
             };
         }),
 
@@ -948,9 +946,6 @@ export const apexNebulaMachine = createMachine({
         checkWin: ({ context }) => {
             return context.genomes.some(g => checkWinCondition(g));
         },
-        isLastMutationRoll: ({ context }) => {
-            return context.currentPlayerIndex >= context.players.length - 1;
-        },
         isLastPhenotypeTurn: ({ context }) => {
             return context.currentPlayerIndex >= context.turnOrder.length - 1;
         },
@@ -981,7 +976,13 @@ export const apexNebulaMachine = createMachine({
                 return false;
             }
 
-            // 3. NAV check (movesMade < NAV)
+            // 3. Singularity specific check: must have at least 10 Data Clusters to enter
+            if (targetHex.type === 'Singularity' && genome.dataClusters < 10) {
+                console.log(`Guard: canMove failed - Singularity requires 10 Data Clusters. Has: ${genome.dataClusters}`);
+                return false;
+            }
+
+            // 4. NAV check (movesMade < NAV)
             const nav = (genome.baseAttributes['NAV'] || 0) + (genome.mutationModifiers['NAV'] || 0);
             const actions = context.phenotypeActions[event.playerId] || { movesMade: 0, harvestDone: false };
 
