@@ -35,9 +35,9 @@ export const rollSeededDice = (prng: () => number, sides: number): number => {
     return Math.floor(prng() * sides) + 1;
 };
 
-// Helper: Check win condition (Gen 0: 30 Data Clusters)
+// Helper: Check win condition (Gen 0: 30 Data Clusters, or successful Singularity check)
 export const checkWinCondition = (genome: PlayerGenome): boolean => {
-    return genome.dataClusters >= 30;
+    return genome.dataClusters >= 30 || !!genome.hasPassedSingularity;
 };
 
 // Helper: Get Axial Hex Distance

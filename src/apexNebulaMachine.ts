@@ -176,11 +176,18 @@ export const apexNebulaMachine = createMachine({
                     { target: 'nextRound', actions: 'finalizeOptimization' },
                 ],
             },
-            always: {
-                target: 'nextRound',
-                guard: 'allPlayersConfirmed',
-                actions: 'finalizeOptimization'
-            }
+            always: [
+                {
+                    target: 'won',
+                    guard: 'allConfirmedAndWin',
+                    actions: 'finalizeOptimization'
+                },
+                {
+                    target: 'nextRound',
+                    guard: 'allPlayersConfirmed',
+                    actions: 'finalizeOptimization'
+                }
+            ]
         },
         nextRound: {
             always: {
@@ -413,11 +420,15 @@ export const apexNebulaMachine = createMachine({
 
             const newGenomes = context.genomes.map((g) => {
                 if (g.playerId !== playerId) return g;
+
+                const passedSingularity = targetHex.type === 'Singularity' && !anyFailure;
+
                 return {
                     ...g,
                     rawMatter: g.rawMatter + (isDoubleAward ? (successMatter ? targetHex.yield.matter : 0) : (!anyFailure ? targetHex.yield.matter : 0)),
                     dataClusters: g.dataClusters + (isDoubleAward ? (successData ? targetHex.yield.data : 0) : (!anyFailure ? targetHex.yield.data : 0)),
-                    stability: Math.max(0, g.stability - stabilityLoss)
+                    stability: Math.max(0, g.stability - stabilityLoss),
+                    hasPassedSingularity: g.hasPassedSingularity || passedSingularity
                 };
             });
 
@@ -883,6 +894,7 @@ export const apexNebulaMachine = createMachine({
                 mutationModifiers: { ...EMPTY_MODS },
                 tempAttributeModifiers: { ...EMPTY_MODS },
                 cubePool: 12,
+                hasPassedSingularity: false,
             })),
             pieces: context.players.map((p, i) => {
                 const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
@@ -907,6 +919,12 @@ export const apexNebulaMachine = createMachine({
 
     },
     guards: {
+        allConfirmedAndWin: ({ context }) => {
+            const isConfirmed = context.confirmedPlayers.length === context.players.length;
+            const hasWinner = context.genomes.some(g => checkWinCondition(g));
+            console.log('Guard: allConfirmedAndWin', isConfirmed && hasWinner, 'Confirmed:', isConfirmed, 'Winner:', hasWinner);
+            return isConfirmed && hasWinner;
+        },
         allPlayersConfirmed: ({ context }) => {
             const isConfirmed = context.confirmedPlayers.length === context.players.length;
             console.log('Guard: allPlayersConfirmed', isConfirmed, 'Confirmed:', context.confirmedPlayers.length, 'Total:', context.players.length);

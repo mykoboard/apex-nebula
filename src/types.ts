@@ -41,6 +41,7 @@ export interface PlayerGenome {
     mutationModifiers: Record<AttributeType, number>; // Stochastic noise (+/-)
     tempAttributeModifiers: Record<AttributeType, number>; // Environmental effects (-/+)
     cubePool: number; // Remaining cubes to distribute during setup
+    hasPassedSingularity?: boolean;
 }
 
 export type EventCardType = 'Hazard' | 'Pressure' | 'Shift' | 'Apex Lead' | 'Bonus';
