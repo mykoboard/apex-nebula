@@ -35,6 +35,7 @@ const ApexNebula: React.FC<GameProps> = ({
         return playerInfos.map((info, index) => ({
             id: info.id,
             name: info.name,
+            publicKey: info.publicKey,
             color: COLORS[index % COLORS.length],
         }));
     }, [playerInfos]);
@@ -67,12 +68,20 @@ const ApexNebula: React.FC<GameProps> = ({
         },
     });
 
-    const localPlayer = playerInfos.find(p => p.isLocal);
+    const localPlayerInfo = playerInfos.find(p => p.isLocal);
+    // Guest receives IDs from the Host's machine via SYNC_STATE.
+    // We fuzzy-match the guest to their actual context ID via publicKey or name fallback.
+    const machineLocalPlayer = state.context.players.find(p =>
+        (p.publicKey && localPlayerInfo?.publicKey && p.publicKey === localPlayerInfo.publicKey) ||
+        (p.name === localPlayerInfo?.name)
+    ) || localPlayerInfo;
+
+    const localPlayer = machineLocalPlayer;
     const localGenome = state.context.genomes.find(g => g.playerId === localPlayer?.id);
     const activePlayerId = state.context.turnOrder[state.context.currentPlayerIndex];
     const currentPlayer = state.context.players.find(p => p.id === activePlayerId);
     const isLocalPlayerTurn = localPlayer && activePlayerId === localPlayer.id;
-    const otherPlayers = playerInfos.filter(p => !p.isLocal);
+    const otherPlayers = state.context.players.filter(p => p.id !== localPlayer?.id);
 
     // WebRTC message handling
     useEffect(() => {
@@ -81,6 +90,11 @@ const ApexNebula: React.FC<GameProps> = ({
                 const message = JSON.parse(data);
                 if (isGameMessage(message)) {
                     send({ type: message.type as any, ...message.payload });
+
+                    // If Host receives an action from a Guest, it should persist it to the ledger (except state syncs)
+                    if (isInitiator && message.type !== 'SYNC_STATE') {
+                        onAddLedger({ type: message.type, payload: message.payload });
+                    }
                 }
             } catch (error) {
                 console.error('Failed to parse message:', error);
@@ -98,6 +112,16 @@ const ApexNebula: React.FC<GameProps> = ({
         };
     }, [connections, send]);
 
+    // Start game for host once players are ready
+    useEffect(() => {
+        if (isInitiator && state.matches('waitingForPlayers') && players.length > 0) {
+            send({
+                type: 'START_GAME',
+                seed: state.context.seed || Date.now()
+            });
+        }
+    }, [isInitiator, players, send, state.value, state.context.seed]);
+
     // Sync state changes to other players
     useEffect(() => {
         if (isInitiator && state.context.players.length > 0) {
@@ -108,16 +132,30 @@ const ApexNebula: React.FC<GameProps> = ({
         }
     }, [state.context, isInitiator, connections]);
 
+    // Apply ledger entries to local state
+    // Important: Any action that the Host receives via WebRTC is added to the ledger here,
+    // so we don't need to rebuild state from the ledger array live,
+    // because handleMessage and handleAction already dispatch to the local state machine instantly.
+
     const handleAction = (actionType: string, payload: any) => {
-        send({ type: actionType as any, ...payload });
+        if (isInitiator) {
+            send({ type: actionType as any, ...payload });
 
-        if (state.matches('setupPhase') && actionType === 'DISTRIBUTE_CUBES') {
-            const { playerId, amount } = payload;
-            onAddLedger({ type: actionType, payload: { playerId, amount } });
-            return;
+            if (state.matches('setupPhase') && actionType === 'DISTRIBUTE_CUBES') {
+                const { playerId, amount } = payload;
+                onAddLedger({ type: actionType, payload: { playerId, amount } });
+                return;
+            }
+
+            onAddLedger({ type: actionType, payload });
+        } else {
+            // Guest sends WebRTC message to Host instead of trying to add to ledger
+            const message = createGameMessage(actionType, payload);
+            connections.forEach(conn => conn.send(JSON.stringify(message)));
+
+            // Optimistically dispatch locally so UI updates instantly
+            send({ type: actionType as any, ...payload });
         }
-
-        onAddLedger({ type: actionType, payload });
     };
 
     const handleFinishTurn = () => {
@@ -265,9 +303,23 @@ const ApexNebula: React.FC<GameProps> = ({
 
                             <div className="space-y-4">
                                 {state.matches('setupPhase') && (
-                                    <p className="text-[10px] text-slate-400 leading-relaxed italic">
-                                        Distribute 12 cubes to initialize your configuration.
-                                    </p>
+                                    <div className="space-y-4">
+                                        <p className="text-[10px] text-slate-400 leading-relaxed italic">
+                                            Distribute 12 cubes to initialize your configuration.
+                                        </p>
+                                        <Button
+                                            onClick={() => handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })}
+                                            disabled={!localGenome || localGenome.cubePool > 0 || state.context.confirmedPlayers.includes(localPlayer?.id || '')}
+                                            className={`w-full uppercase font-black tracking-widest text-[10px] h-10 rounded-xl transition-all ${state.context.confirmedPlayers.includes(localPlayer?.id || '')
+                                                ? 'bg-slate-800 text-slate-500'
+                                                : localGenome?.cubePool === 0
+                                                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg'
+                                                    : 'bg-indigo-900/40 text-indigo-400/50 cursor-not-allowed border border-indigo-500/20'
+                                                }`}
+                                        >
+                                            {state.context.confirmedPlayers.includes(localPlayer?.id || '') ? 'Confirmed' : localGenome?.cubePool === 0 ? 'Confirm Setup' : `${localGenome?.cubePool} Cubes Remaining`}
+                                        </Button>
+                                    </div>
                                 )}
 
                                 {state.matches('mutationPhase') && (
@@ -548,13 +600,24 @@ const ApexNebula: React.FC<GameProps> = ({
                                                 <Crown className="w-3 h-3 text-yellow-500" />
                                             )}
                                         </div>
-                                        {isFinished && (
+                                        {state.matches('setupPhase') ? (
+                                            <div className={`px-2 py-0.5 border rounded text-[8px] font-black uppercase ${state.context.confirmedPlayers.includes(player.id) ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-slate-800 border-white/5 text-slate-500'}`}>
+                                                {state.context.confirmedPlayers.includes(player.id) ? 'Ready' : 'Configuring'}
+                                            </div>
+                                        ) : isFinished && (
                                             <div className="px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded text-[8px] font-black text-green-400 uppercase">
                                                 Ready
                                             </div>
                                         )}
                                     </div>
-                                    <PlayerConsole genome={genome} />
+                                    {state.matches('setupPhase') ? (
+                                        <div className="bg-slate-900/50 rounded-2xl border border-white/5 p-6 flex flex-col items-center justify-center opacity-60 min-h-[220px]">
+                                            <Dna className="w-8 h-8 text-slate-600 mb-2" />
+                                            <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase">Classified</span>
+                                        </div>
+                                    ) : (
+                                        <PlayerConsole genome={genome} />
+                                    )}
                                 </div>
                             );
                         })}

@@ -1,7 +1,7 @@
 import { LedgerEntry } from '@mykoboard/integration';
 
 export type Color = 'red' | 'green' | 'blue' | 'yellow';
-export type GamePhase = 'setup' | 'mutation' | 'phenotype' | 'environmental' | 'competitive' | 'optimization';
+export type GamePhase = 'waiting' | 'setup' | 'mutation' | 'phenotype' | 'environmental' | 'competitive' | 'optimization';
 export type AttributeType = 'NAV' | 'LOG' | 'DEF' | 'SCN';
 
 export type HexType =
@@ -83,6 +83,7 @@ export interface EventEffect {
 export interface Player {
     id: string;
     name: string;
+    publicKey?: string;
     color: Color;
 }
 

@@ -27,7 +27,7 @@ export const apexNebulaMachine = createMachine({
         hexGrid: createHexGrid(input?.seed || 12345),
         eventDeck: [...INITIAL_EVENT_DECK],
         currentEvent: null,
-        gamePhase: 'setup' as GamePhase,
+        gamePhase: 'waiting' as GamePhase,
         round: 1,
         isInitiator: input?.isInitiator ?? false,
         seed: input?.seed,
@@ -45,7 +45,10 @@ export const apexNebulaMachine = createMachine({
     }),
     states: {
         waitingForPlayers: {
-            entry: () => console.log('Machine State: waitingForPlayers'),
+            entry: [
+                assign({ gamePhase: 'waiting' }),
+                () => console.log('Machine State: waitingForPlayers')
+            ],
             on: {
                 START_GAME: {
                     target: 'setupPhase',
@@ -53,10 +56,6 @@ export const apexNebulaMachine = createMachine({
                         seed: ({ event }) => event.type === 'START_GAME' ? event.seed : undefined,
                         turnOrder: ({ context }) => context.players.map(p => p.id),
                     }),
-                },
-                SYNC_STATE: {
-                    target: 'setupPhase',
-                    actions: 'syncState',
                 },
             },
         },
@@ -69,16 +68,19 @@ export const apexNebulaMachine = createMachine({
                 DISTRIBUTE_CUBES: {
                     actions: 'distributeCubes',
                 },
+                CONFIRM_PHASE: {
+                    actions: 'confirmPhase',
+                },
             },
             always: {
                 target: 'mutationPhase',
-                guard: 'allPlayersReady',
+                guard: 'allPlayersConfirmed',
                 actions: 'calculateInitialPriority',
             },
         },
         mutationPhase: {
             entry: [
-                assign({
+                assign(({ event }) => event.type === 'SYNC_STATE' ? {} : {
                     gamePhase: 'mutation',
                     currentPlayerIndex: 0,
                     confirmedPlayers: []
@@ -101,7 +103,7 @@ export const apexNebulaMachine = createMachine({
         },
         phenotypePhase: {
             entry: [
-                assign({
+                assign(({ event }) => event.type === 'SYNC_STATE' ? {} : {
                     gamePhase: 'phenotype',
                     confirmedPlayers: [],
                     currentPlayerIndex: 0,
@@ -149,7 +151,7 @@ export const apexNebulaMachine = createMachine({
             },
         },
         optimizationPhase: {
-            entry: assign({ gamePhase: 'optimization', confirmedPlayers: [] }),
+            entry: assign(({ event }) => event.type === 'SYNC_STATE' ? {} : { gamePhase: 'optimization', confirmedPlayers: [] }),
             on: {
                 OPTIMIZE_DATA: {
                     actions: 'optimizeData',
@@ -198,9 +200,15 @@ export const apexNebulaMachine = createMachine({
         },
     },
     on: {
-        SYNC_STATE: {
-            actions: 'syncState',
-        },
+        SYNC_STATE: [
+            { target: '.setupPhase', guard: ({ event }) => event.context.gamePhase === 'setup', actions: 'syncState' },
+            { target: '.mutationPhase', guard: ({ event }) => event.context.gamePhase === 'mutation', actions: 'syncState' },
+            { target: '.phenotypePhase', guard: ({ event }) => event.context.gamePhase === 'phenotype', actions: 'syncState' },
+            { target: '.environmentalPhase', guard: ({ event }) => event.context.gamePhase === 'environmental', actions: 'syncState' },
+            { target: '.competitivePhase', guard: ({ event }) => event.context.gamePhase === 'competitive', actions: 'syncState' },
+            { target: '.optimizationPhase', guard: ({ event }) => event.context.gamePhase === 'optimization', actions: 'syncState' },
+            { actions: 'syncState' }
+        ],
         FORCE_EVENT: {
             target: '.environmentalPhase',
             actions: 'forceEnvironmentalEvent',
@@ -326,7 +334,7 @@ export const apexNebulaMachine = createMachine({
 
             if (newCubes < 1 || newCubes > 10) return {};
             if (context.gamePhase === 'setup' && newCubes > 6) return {};
-            if (context.gamePhase === 'optimization' && amount < 0) return {}; // No reductions in Optimization
+            if (context.gamePhase === 'optimization' && amount < 0 && attribute) return {}; // No reductions in Optimization except pruning (which passes undefined attribute)
             if (genome.cubePool - amount < 0 && amount > 0) return {};
 
             const newGenomes = context.genomes.map((g, idx) =>
@@ -463,7 +471,8 @@ export const apexNebulaMachine = createMachine({
             };
         }),
 
-        drawEnvironmentalEvent: assign(({ context }) => {
+        drawEnvironmentalEvent: assign(({ context, event }) => {
+            if (event.type === 'SYNC_STATE') return {};
             if (context.currentEvent) return {}; // Skip if already forced
 
             let currentDeck = context.eventDeck;
@@ -474,10 +483,10 @@ export const apexNebulaMachine = createMachine({
                 currentDeck = shuffleSeeded([...INITIAL_EVENT_DECK], prng);
             }
 
-            const event = currentDeck[0];
+            const drawnEvent = currentDeck[0];
             const newDeck = currentDeck.slice(1);
             return {
-                currentEvent: event || null,
+                currentEvent: drawnEvent || null,
                 eventDeck: newDeck,
             };
         }),
@@ -810,9 +819,9 @@ export const apexNebulaMachine = createMachine({
             const newConfirmed = [...context.confirmedPlayers, event.playerId];
             console.log('New confirmed list:', newConfirmed);
 
-            // Deduct matter immediately upon confirming
+            // Deduct matter immediately upon confirming (skip if in setup phase, as cost doesn't apply)
             const playerGenome = context.genomes.find(g => g.playerId === event.playerId);
-            const cost = playerGenome ? calculateMaintenanceCost(playerGenome) : 0;
+            const cost = (playerGenome && context.gamePhase !== 'setup') ? calculateMaintenanceCost(playerGenome) : 0;
             const newGenomes = context.genomes.map(g =>
                 g.playerId === event.playerId
                     ? { ...g, rawMatter: Math.max(0, g.rawMatter - cost) }
