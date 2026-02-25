@@ -12,7 +12,7 @@ This is the definitive master document for **Project: Apex Nebula**. It incorpor
 
 ##  2. Initialization: Weight Setup
 
-Players begin with a base pool of **16 points** to distribute across four attributes on their **Genome Console**.
+Players begin with a base pool of **12 points** to distribute across four attributes on their **Genome Console**.
 
 * **The Attributes:**
 * **Navigation (NAV):** Movement range and resistance to displacement.
@@ -54,10 +54,12 @@ Stability (5 Points) represents your physical hardware's health.
 
 * **Losing Stability:** Occurs when failing **Event Cards**, failing certain **Hex Hazards**, or losing a **Hustle**.
 * **The Hard Reboot:** If Stability hits **0**:
-1. Move to **Home Nebula**.
-2. Lose **50% of your Data**.
-3. **Genome Degradation:** Permanent **-2 points** to your highest attribute.
-4. **Learning Pity:** Gain **1 Insight Token** (discard to treat any Interference roll as a 6).
+1. **Return to starting hex** (Home Nebula).
+2. **Attributes reset to 1**.
+3. **Stability resets to 3**.
+4. **Cube Pool resets to 12**.
+5. **Raw Matter is cleared** (0).
+6. **Data Clusters reset to 1**.
 
 ---
 
@@ -92,7 +94,7 @@ To prevent "Overfitting" (having stats that are too expensive to keep), players 
 1. **Pruning (Optional):** Before paying costs, you may voluntarily **permanently remove**  points from your attributes. Gain  **Matter** immediately.
 2. **Upgrade:** Spend **3 Data** for +1 permanent attribute point.
 3. **Maintenance Cost:**
-* **Total Points 16–20:** Pay 1 Matter.
+* **Total Points 12–16:** Pay 1 Matter.
 * **Total Points 21–28:** Pay 2 Matter.
 * **Total Points 29+:** Pay 3 Matter.
 

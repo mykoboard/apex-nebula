@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => ({
             filename: "remoteEntry.js",
             exposes: {
                 "./ApexNebula": "./src/ApexNebula.tsx",
+                "./GameInfo": "./src/GameInfo.tsx",
             },
             shared: ["react", "react-dom", "@xstate/react", "xstate", "@mykoboard/integration"],
         }),
