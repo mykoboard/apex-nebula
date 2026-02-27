@@ -9,22 +9,22 @@
         "preview": "vite preview"
     },
     "dependencies": {
-        "react": "^19.2.3",
-        "react-dom": "^19.2.3",
-        "lucide-react": "^0.562.0",
+        "vue": "^3.5.13",
+        "lucide-vue-next": "^0.477.0",
         "clsx": "^2.1.1",
-        "tailwind-merge": "^3.4.0",
-        "xstate": "^5.25.0",
-        "@xstate/react": "^6.0.0",
+        "tailwind-merge": "^3.0.1",
+        "xstate": "^5.19.1",
+        "@xstate/vue": "^4.0.0",
         "@mykoboard/integration": "workspace:*"
     },
     "devDependencies": {
-        "@vitejs/plugin-react-swc": "^4.2.2",
+        "@vitejs/plugin-vue": "^5.2.1",
         "@originjs/vite-plugin-federation": "^1.4.1",
-        "@tailwindcss/postcss": "^4.1.18",
-        "postcss": "^8.5.6",
-        "tailwindcss": "^4.1.18",
-        "typescript": "^5.9.3",
-        "vite": "^7.3.0"
+        "@tailwindcss/postcss": "^4.0.0",
+        "postcss": "^8.5.1",
+        "tailwindcss": "^4.0.0",
+        "typescript": "~5.7.3",
+        "vite": "^6.0.7",
+        "vue-tsc": "^2.2.0"
     }
 }

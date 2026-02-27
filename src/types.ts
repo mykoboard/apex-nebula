@@ -126,5 +126,5 @@ export type ApexNebulaEvent =
     | { type: 'OPTIMIZE_DATA'; playerId: string }
     | { type: 'NEXT_PHASE' }
     | { type: 'FORCE_EVENT'; eventId: string }
-    | { type: 'START_GAME'; seed?: number }
+    | { type: 'START_GAME'; seed?: number; players: Player[] }
     | { type: 'RESET' };

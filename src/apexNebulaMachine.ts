@@ -5,8 +5,8 @@ import {
     ApexNebulaEvent,
     AttributeType
 } from './types';
-import { createHexGrid } from './components/HexGrid';
-import { INITIAL_EVENT_DECK } from './components/EventDeck';
+import { createHexGrid } from './gridUtils';
+import { INITIAL_EVENT_DECK } from './eventUtils';
 import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded, calculateMaintenanceCost } from './utils';
 
 const EMPTY_MODS = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
@@ -54,7 +54,27 @@ export const apexNebulaMachine = createMachine({
                     target: 'setupPhase',
                     actions: assign({
                         seed: ({ event }) => event.type === 'START_GAME' ? event.seed : undefined,
-                        turnOrder: ({ context }) => context.players.map(p => p.id),
+                        players: ({ event }) => event.type === 'START_GAME' ? event.players : [],
+                        genomes: ({ event }) => event.type === 'START_GAME' ? event.players.map(p => ({
+                            playerId: p.id,
+                            stability: 3,
+                            dataClusters: 0,
+                            rawMatter: 0,
+                            insightTokens: 0,
+                            lockedSlots: [],
+                            baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
+                            mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
+                            tempAttributeModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
+                            cubePool: 8,
+                        })) : [],
+                        pieces: ({ event }) => event.type === 'START_GAME' ? event.players.map((p, i) => {
+                            const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
+                            return {
+                                playerId: p.id,
+                                hexId: starts[i % starts.length],
+                            };
+                        }) : [],
+                        turnOrder: ({ event }) => event.type === 'START_GAME' ? event.players.map(p => p.id) : [],
                     }),
                 },
             },
@@ -269,7 +289,8 @@ export const apexNebulaMachine = createMachine({
             };
         }),
 
-        applyAllMutations: assign(({ context }) => {
+        applyAllMutations: assign(({ context, event }) => {
+            if (event.type === 'SYNC_STATE') return {};
             const attributeMap: AttributeType[] = ['NAV', 'LOG', 'DEF', 'SCN'];
             const newResults: Record<string, any> = {};
 
