@@ -15,7 +15,7 @@
         "tailwind-merge": "^3.0.1",
         "xstate": "^5.19.1",
         "@xstate/vue": "^4.0.0",
-        "@mykoboard/integration": "workspace:*"
+        "@mykoboard/integration": "0.1.0"
     },
     "devDependencies": {
         "@vitejs/plugin-vue": "^5.2.1",
