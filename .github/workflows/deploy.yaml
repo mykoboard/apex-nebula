@@ -21,8 +21,8 @@ jobs:
 
       - name: Create NPM Config
         run: |
-          echo "@mykoboard:registry=https://npm.pkg.github.com" > ~/.npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+          echo "@mykoboard:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
 
       - name: Install Dependencies
         run: bun install --no-frozen-lockfile
