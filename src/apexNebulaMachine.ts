@@ -101,7 +101,7 @@ export const apexNebulaMachine = createMachine({
         mutationPhase: {
             entry: [
                 assign(({ event }) => event.type === 'SYNC_STATE' ? {} : {
-                    gamePhase: 'mutation',
+                    gamePhase: 'mutation' as const,
                     currentPlayerIndex: 0,
                     confirmedPlayers: []
                 }),
@@ -124,7 +124,7 @@ export const apexNebulaMachine = createMachine({
         phenotypePhase: {
             entry: [
                 assign(({ event }) => event.type === 'SYNC_STATE' ? {} : {
-                    gamePhase: 'phenotype',
+                    gamePhase: 'phenotype' as const,
                     confirmedPlayers: [],
                     currentPlayerIndex: 0,
                     phenotypeActions: {}
@@ -171,7 +171,7 @@ export const apexNebulaMachine = createMachine({
             },
         },
         optimizationPhase: {
-            entry: assign(({ event }) => event.type === 'SYNC_STATE' ? {} : { gamePhase: 'optimization', confirmedPlayers: [] }),
+            entry: assign(({ event }) => event.type === 'SYNC_STATE' ? {} : { gamePhase: 'optimization' as const, confirmedPlayers: [] }),
             on: {
                 OPTIMIZE_DATA: {
                     actions: 'optimizeData',
