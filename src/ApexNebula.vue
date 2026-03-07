@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useMachine } from '@xstate/vue';
 import { createGameMessage, isGameMessage } from '@mykoboard/integration';
 import type { GameProps } from '@mykoboard/integration';
@@ -106,17 +106,20 @@ const handleMessage = (data: string) => {
   }
 };
 
-onMounted(() => {
-  props.connections.forEach((conn) => {
-    conn.addMessageListener(handleMessage);
-  });
-});
-
-onUnmounted(() => {
-  props.connections.forEach((conn) => {
-    conn.removeMessageListener(handleMessage);
-  });
-});
+watch(
+  () => props.connections,
+  (conns, _, onCleanup) => {
+    conns.forEach((conn) => {
+      conn.addMessageListener(handleMessage);
+    });
+    onCleanup(() => {
+      conns.forEach((conn) => {
+        conn.removeMessageListener(handleMessage);
+      });
+    });
+  },
+  { immediate: true }
+);
 
 // Start game for host once players are ready
 watch(

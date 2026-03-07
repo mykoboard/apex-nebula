@@ -14,20 +14,28 @@ const mockPlayers: PlayerInfo[] = [
 const mockConnections = ref<SimpleConnection[]>([]);
 let remoteProxy: SimpleConnection | null = null;
 const showEvents = ref(false);
+const isProcessing = ref(false);
+const restartKey = ref(0);
+
+const handleReset = () => {
+  restartKey.value++;
+  console.log('[Standalone] Resetting simulator state...');
+};
 
 onMounted(async () => {
   console.log('[Standalone] Initializing WebRTC pair...');
   const [connA, connB] = await createLocalWebRTCPair();
   console.log('[Standalone] WebRTC pair ready. connA ID:', connA.id);
   
-  // Alpha AI uses connA to communicate with the world
   mockConnections.value = [connA];
-  // We keep connB as a way to simulate incoming messages for connA
   remoteProxy = connB;
 
-  // Add a listener to remoteProxy to see what the game is sending out
   remoteProxy.addMessageListener((data) => {
-    console.log('[Standalone] Remote received from game:', JSON.parse(data));
+    const msg = JSON.parse(data);
+    // Ignore frequent SYNC_STATE logs to keep console clean, only log other types
+    if (msg.type !== 'SYNC_STATE') {
+      console.log('[Standalone] Remote received from game:', msg);
+    }
   });
 });
 
@@ -60,28 +68,36 @@ const startGame = () => {
   sendDebugMessage('START_GAME', { seed });
 };
 
-const forceBetaAIDistribution = () => {
-  console.log('[Standalone] Forcing Beta AI Distribution...');
-  // Deterministic randomization for mock Beta AI
-  const dist = [1, 1, 1, 1];
-  let remaining = 8; // Reset to 8 to reach 12 total (start with 1 each)
-  while (remaining > 0) {
-    const idx = Math.floor(Math.random() * 4);
-    if (dist[idx] < 6) {
-      dist[idx]++;
-      remaining--;
+const forceBetaAIDistribution = async () => {
+  if (isProcessing.value) return;
+  isProcessing.value = true;
+  try {
+    console.log('[Standalone] Forcing Beta AI Distribution & Ready...');
+    const dist = [1, 1, 1, 1];
+    let remaining = 8;
+    while (remaining > 0) {
+      const idx = Math.floor(Math.random() * 4);
+      if (dist[idx] < 6) {
+        dist[idx]++;
+        remaining--;
+      }
     }
+    const attrs = ['NAV', 'LOG', 'DEF', 'SCN'];
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i] as any;
+      if (dist[i] > 1) {
+        sendDebugMessage('DISTRIBUTE_CUBES', {
+          playerId: 'player2',
+          attribute: attr,
+          amount: dist[i] - 1,
+        });
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+    sendDebugMessage('CONFIRM_PHASE', { playerId: 'player2' });
+  } finally {
+    isProcessing.value = false;
   }
-  const attrs = ['NAV', 'LOG', 'DEF', 'SCN'];
-  attrs.forEach((attr, i) => {
-    if (dist[i] > 1) {
-      sendDebugMessage('DISTRIBUTE_CUBES', {
-        playerId: 'player2',
-        attribute: attr,
-        amount: dist[i] - 1,
-      });
-    }
-  });
 };
 
 const betaAIConfirm = () => {
@@ -94,6 +110,31 @@ const betaAIFinish = () => {
 
 const betaAIOptConfirm = () => {
   sendDebugMessage('CONFIRM_PHASE', { playerId: 'player2' });
+};
+
+const forceAlphaAIDistribution = async () => {
+  if (isProcessing.value) return;
+  isProcessing.value = true;
+  try {
+    console.log('[Standalone] Forcing Alpha AI Distribution & Ready...');
+    const attrs: any[] = ['NAV', 'LOG', 'DEF', 'SCN'];
+    for (const attr of attrs) {
+      sendDebugMessage('DISTRIBUTE_CUBES', {
+        playerId: 'player1',
+        attribute: attr,
+        amount: 2,
+      });
+      await new Promise(r => setTimeout(r, 50));
+    }
+    sendDebugMessage('CONFIRM_PHASE', { playerId: 'player1' });
+  } finally {
+    isProcessing.value = false;
+  }
+};
+
+const forceAllReady = async () => {
+  await forceBetaAIDistribution();
+  await forceAlphaAIDistribution();
 };
 </script>
 
@@ -120,6 +161,12 @@ const betaAIOptConfirm = () => {
         >
           Start
         </button>
+        <button
+          @click="handleReset"
+          class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold uppercase rounded-md transition-colors"
+        >
+          Reset
+        </button>
       </div>
 
       <div
@@ -143,6 +190,12 @@ const betaAIOptConfirm = () => {
           class="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors flex-1"
         >
           Force Beta AI Distribution
+        </button>
+        <button
+          @click="forceAllReady"
+          class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase rounded-md transition-colors flex-1"
+        >
+          All Ready
         </button>
       </div>
       <div class="flex gap-1">
@@ -169,6 +222,7 @@ const betaAIOptConfirm = () => {
     </div>
 
     <ApexNebula
+      :key="restartKey"
       :connections="mockConnections"
       :player-infos="mockPlayers"
       :player-names="mockPlayers.map((p) => p.name)"
