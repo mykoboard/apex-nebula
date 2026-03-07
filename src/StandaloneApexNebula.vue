@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import ApexNebula from './ApexNebula.vue';
 import type { PlayerInfo, SimpleConnection } from '@mykoboard/integration';
-import { createLocalWebRTCPair } from '@mykoboard/integration';
+import { createLocalWebRTCPair, createGameMessage } from '@mykoboard/integration';
 import { INITIAL_EVENT_DECK } from './eventUtils';
 import { ChevronDown } from 'lucide-vue-next';
 
@@ -16,11 +16,19 @@ let remoteProxy: SimpleConnection | null = null;
 const showEvents = ref(false);
 
 onMounted(async () => {
+  console.log('[Standalone] Initializing WebRTC pair...');
   const [connA, connB] = await createLocalWebRTCPair();
+  console.log('[Standalone] WebRTC pair ready. connA ID:', connA.id);
+  
   // Alpha AI uses connA to communicate with the world
   mockConnections.value = [connA];
   // We keep connB as a way to simulate incoming messages for connA
   remoteProxy = connB;
+
+  // Add a listener to remoteProxy to see what the game is sending out
+  remoteProxy.addMessageListener((data) => {
+    console.log('[Standalone] Remote received from game:', JSON.parse(data));
+  });
 });
 
 const handleAddLedger = (action: { type: string; payload: any }) => {
@@ -32,22 +40,31 @@ const handleFinishGame = () => {
   alert('Game finished! In production, this would return to lobby.');
 };
 
+const sendDebugMessage = (type: string, payload: any) => {
+  if (!remoteProxy) {
+    console.error('[Standalone] Cannot send message: remoteProxy not initialized');
+    return;
+  }
+  const message = createGameMessage(type, payload);
+  console.log(`[Standalone] Simulating ${type} from remote:`, message);
+  remoteProxy.send(JSON.stringify(message));
+};
+
 const forceEvent = (eventId: string) => {
-  const message = { namespace: 'game', type: 'FORCE_EVENT', payload: { eventId }, senderId: 'debug' };
-  remoteProxy?.send(JSON.stringify(message));
+  sendDebugMessage('FORCE_EVENT', { eventId });
   showEvents.value = false;
 };
 
 const startGame = () => {
   const seed = Math.floor(Math.random() * 1000000);
-  const message = { namespace: 'game', type: 'START_GAME', payload: { seed }, senderId: 'debug' };
-  remoteProxy?.send(JSON.stringify(message));
+  sendDebugMessage('START_GAME', { seed });
 };
 
 const forceBetaAIDistribution = () => {
+  console.log('[Standalone] Forcing Beta AI Distribution...');
   // Deterministic randomization for mock Beta AI
   const dist = [1, 1, 1, 1];
-  let remaining = 12;
+  let remaining = 8; // Reset to 8 to reach 12 total (start with 1 each)
   while (remaining > 0) {
     const idx = Math.floor(Math.random() * 4);
     if (dist[idx] < 6) {
@@ -58,36 +75,25 @@ const forceBetaAIDistribution = () => {
   const attrs = ['NAV', 'LOG', 'DEF', 'SCN'];
   attrs.forEach((attr, i) => {
     if (dist[i] > 1) {
-      // Only send if we added something
-      const message = {
-        namespace: 'game',
-        type: 'DISTRIBUTE_CUBES',
-        payload: {
-          playerId: 'player2',
-          attribute: attr,
-          amount: dist[i] - 1,
-        },
-        senderId: 'debug',
-      };
-      // Beta AI messages arrive from "remote"
-      remoteProxy?.send(JSON.stringify(message));
+      sendDebugMessage('DISTRIBUTE_CUBES', {
+        playerId: 'player2',
+        attribute: attr,
+        amount: dist[i] - 1,
+      });
     }
   });
 };
 
 const betaAIConfirm = () => {
-  const message = { namespace: 'game', type: 'CONFIRM_PHASE', payload: { playerId: 'player2' }, senderId: 'debug' };
-  remoteProxy?.send(JSON.stringify(message));
+  sendDebugMessage('CONFIRM_PHASE', { playerId: 'player2' });
 };
 
 const betaAIFinish = () => {
-  const message = { namespace: 'game', type: 'FINISH_TURN', payload: { playerId: 'player2' }, senderId: 'debug' };
-  remoteProxy?.send(JSON.stringify(message));
+  sendDebugMessage('FINISH_TURN', { playerId: 'player2' });
 };
 
 const betaAIOptConfirm = () => {
-  const message = { namespace: 'game', type: 'CONFIRM_PHASE', payload: { playerId: 'player2' }, senderId: 'debug' };
-  remoteProxy?.send(JSON.stringify(message));
+  sendDebugMessage('CONFIRM_PHASE', { playerId: 'player2' });
 };
 </script>
 
