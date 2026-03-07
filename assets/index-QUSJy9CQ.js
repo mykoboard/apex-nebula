@@ -1,0 +1,1 @@
+import{r as e}from"./_virtual___federation_fn_import-CfXvx7YO.js";var{createApp:t}=await e(`vue`);
