@@ -1,6 +1,9 @@
 import { createApp } from 'vue';
 import './index.css';
-import StandaloneApexNebula from './StandaloneApexNebula.vue';
 
-const app = createApp(StandaloneApexNebula);
-app.mount('#root');
+if (import.meta.env.DEV) {
+    import('./StandaloneApexNebula.vue').then(({ default: StandaloneApexNebula }) => {
+        const app = createApp(StandaloneApexNebula);
+        app.mount('#root');
+    });
+}
