@@ -1,0 +1,1 @@
+import{importShared as o}from"./__federation_fn_import-Dy-w4aBM.js";import"./ApexNebula.vue_vue_type_script_setup_true_lang-BqHGx5Yr.js";import{_ as p}from"./GameInfo.vue_vue_type_script_setup_true_lang-BIXKb47J.js";const{createApp:t}=await o("vue");t(p).mount("#root");
