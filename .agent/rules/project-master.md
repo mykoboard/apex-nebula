@@ -9,6 +9,7 @@ trigger: always_on
 - **Frontend**: **Vue 3** (Composition API, `<script setup>`).
 - **MFE Pattern**: `src/` is the Vue shell; `components/` for React/Integration components.
 - **Language**: **Strict TypeScript**. Export types from `@/types`. No `any`.
+- **Deployment**: **Github actions**. Using github actions to build and publish github page
 
 
 ## Games specifications
