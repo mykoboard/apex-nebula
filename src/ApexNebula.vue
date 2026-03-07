@@ -69,13 +69,13 @@ const state = snapshot;
 
 const localPlayerInfo = computed(() => props.playerInfos.find((p) => p.isLocal));
 
-const machineLocalPlayer = computed(() => {
+const machineLocalPlayer = computed<Player | null>(() => {
   return (
     state.value.context.players.find(
       (p: Player) =>
         (p.publicKey && localPlayerInfo.value?.publicKey && p.publicKey === localPlayerInfo.value.publicKey) ||
-        p.name === localPlayerInfo.value?.name
-    ) || localPlayerInfo.value
+        p.id === localPlayerInfo.value?.id
+    ) || null
   );
 });
 
@@ -86,7 +86,7 @@ const currentPlayer = computed(() => {
   if (!activePlayerId.value) return null;
   return state.value.context.players.find((p: Player) => p.id === activePlayerId.value);
 });
-const isLocalPlayerTurn = computed(() => localPlayer.value && activePlayerId.value === localPlayer.value.id);
+const isLocalPlayerTurn = computed(() => !!(localPlayer.value && activePlayerId.value === localPlayer.value.id));
 const otherPlayers = computed(() => state.value.context.players.filter((p: Player) => p.id !== localPlayer.value?.id));
 
 // WebRTC message handling
