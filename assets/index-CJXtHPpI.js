@@ -1,0 +1,1 @@
+import{r as e}from"./_virtual___federation_fn_import-CfXvx7YO.js";import"./ApexNebula-ch5cajie.js";import{t}from"./GameInfo-Dmvo1old.js";var{createApp:n}=await e(`vue`);n(t).mount(`#root`);

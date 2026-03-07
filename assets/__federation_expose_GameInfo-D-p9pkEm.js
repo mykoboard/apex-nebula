@@ -1,0 +1,1 @@
+import"./_virtual___federation_fn_import-CfXvx7YO.js";import{t as e}from"./GameInfo-Dmvo1old.js";export{e as default};
