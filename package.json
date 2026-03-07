@@ -15,7 +15,7 @@
         "tailwind-merge": "^3.5.0",
         "xstate": "^5.28.0",
         "@xstate/vue": "^4.0.4",
-        "@mykoboard/integration": "0.1.0"
+        "@mykoboard/integration": "0.1.0-dev.5"
     },
     "devDependencies": {
         "@originjs/vite-plugin-federation": "^1.4.1",
