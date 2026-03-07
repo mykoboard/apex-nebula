@@ -54,6 +54,7 @@ export const apexNebulaMachine = createMachine({
                     target: 'setupPhase',
                     actions: assign({
                         seed: ({ event }) => event.type === 'START_GAME' ? event.seed : undefined,
+                        hexGrid: ({ event }) => event.type === 'START_GAME' ? createHexGrid(event.seed || 12345) : [],
                         players: ({ event }) => event.type === 'START_GAME' ? event.players : [],
                         genomes: ({ event }) => event.type === 'START_GAME' ? event.players.map(p => ({
                             playerId: p.id,
