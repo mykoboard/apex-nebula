@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Dice6, Zap, Crown } from 'lucide-vue-next';
+import { Dice6, Zap, Crown, Dna } from 'lucide-vue-next';
 import type { Player, AttributeType } from '../types';
 import { calculateMaintenanceCost } from '../utils';
+import AttributeIcon from './AttributeIcon.vue';
 
 const props = defineProps<{
   state: any;
@@ -147,7 +148,7 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
           <div v-for="(res, i) in state.context.lastHarvestResults" :key="i" class="p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase tracking-tight" :class="res.success ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'">
             <span class="truncate max-w-[70px]">{{ state.context.players.find((pl: Player) => pl.id === res.playerId)?.name || 'Unknown' }}</span>
             <div class="flex items-center gap-2">
-              <span class="opacity-70">{{ res.attribute }}</span>
+              <AttributeIcon :type="res.attribute as AttributeType" size="10" class="opacity-70" />
               <div class="flex items-center gap-1">
                 <Dice6 class="w-3 h-3 opacity-50" />
                 <span>{{ res.roll }}</span>
@@ -204,7 +205,7 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
             :disabled="!localGenome || localGenome.dataClusters < 3 || confirmedLocal"
             class="w-full h-8 bg-indigo-600 hover:bg-indigo-500 text-[9px] uppercase font-black tracking-widest rounded-lg flex items-center justify-center"
           >
-            <Zap class="w-3 h-3 mr-2" />
+            <Dna class="w-3 h-3 mr-2" />
             Gain Attribute Cube
           </button>
         </div>
@@ -217,9 +218,10 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
               :key="attr"
               @click="handleAction('PRUNE_ATTRIBUTE', { playerId: localPlayer?.id, attribute: attr })"
               :disabled="!localGenome || localGenome.baseAttributes[attr] <= 1 || confirmedLocal"
-              class="h-8 text-[8px] font-black uppercase border-white/5 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all rounded-md border"
+              class="h-10 text-[8px] font-black uppercase border-white/5 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all rounded-md border flex flex-col items-center justify-center gap-1"
             >
-              Prune {{ attr }}
+              <AttributeIcon :type="attr" size="12" />
+              <span>Prune {{ attr }}</span>
             </button>
           </div>
           <p class="text-[7px] text-slate-500 italic text-center uppercase tracking-tight">+2 Matter per pruned level</p>

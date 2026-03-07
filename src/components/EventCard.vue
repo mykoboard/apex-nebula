@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { AlertTriangle } from 'lucide-vue-next';
-import type { EnvironmentalEvent } from '../types';
+import type { EnvironmentalEvent, AttributeType } from '../types';
+import AttributeIcon from './AttributeIcon.vue';
 
 interface Props {
   event: EnvironmentalEvent | null;
@@ -104,9 +105,15 @@ const typeColors: Record<string, string> = {
       <div class="flex items-center gap-2">
         <div class="bg-black/40 rounded-lg px-2 py-1 border border-white/5 flex flex-col items-center min-w-[60px]">
           <span class="text-[7px] font-black text-slate-500 uppercase tracking-tighter leading-none mb-0.5">REQ CHECK</span>
-          <span class="font-black text-white text-[10px] tracking-widest leading-none">
-            {{ event.checkType }} <span class="text-orange-500">{{ event.threshold }}</span>
-          </span>
+          <div class="flex items-center gap-1">
+            <template v-if="event.checkType !== 'TOTAL_SUM' && event.checkType !== 'NONE'">
+              <AttributeIcon :type="event.checkType as AttributeType" size="10" class="text-white" />
+            </template>
+            <span v-else-if="event.checkType === 'TOTAL_SUM'" class="text-white text-[10px] uppercase font-black">Σ</span>
+            <span class="font-black text-orange-500 text-[10px] tracking-widest leading-none">
+              {{ event.threshold }}
+            </span>
+          </div>
         </div>
       </div>
     </div>

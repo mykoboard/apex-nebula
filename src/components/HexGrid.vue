@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { HexCell, PlayerPiece } from '../types';
 import { getHexDistance } from '../utils';
+import AttributeIcon from './AttributeIcon.vue';
 
 interface Props {
   hexGrid: HexCell[];
@@ -163,18 +164,20 @@ const gridWithData = computed(() => {
         </g>
 
         <!-- Threshold & Attribute -->
-        <g v-if="!hex.isHome" :transform="`translate(${hex.posX}, ${hex.posY + 18})`">
-          <text x="0" y="0" text-anchor="middle" class="text-[14px] font-black fill-white pointer-events-none select-none">
-            {{ hex.threshold > 0 ? hex.threshold : '' }}
-          </text>
-          <text
-            x="0"
-            y="10"
-            text-anchor="middle"
-            class="text-[7px] font-bold fill-slate-500 uppercase tracking-widest pointer-events-none select-none"
-          >
-            {{ Array.isArray(hex.targetAttribute) ? hex.targetAttribute.join('·') : hex.targetAttribute }}
-          </text>
+        <g v-if="!hex.isHome" :transform="`translate(${hex.posX - 25}, ${hex.posY + 12})`">
+          <foreignObject width="50" height="30">
+            <div class="flex flex-col items-center justify-center w-full h-full">
+              <span v-if="hex.threshold > 0" class="text-[14px] font-black text-white leading-none mb-1">
+                {{ hex.threshold }}
+              </span>
+              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center">
+                <template v-if="Array.isArray(hex.targetAttribute)">
+                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="8" class="text-slate-400" />
+                </template>
+                <AttributeIcon v-else :type="hex.targetAttribute" size="10" class="text-slate-400" />
+              </div>
+            </div>
+          </foreignObject>
         </g>
 
         <!-- Piece Indicator -->

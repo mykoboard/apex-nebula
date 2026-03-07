@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { Database, Zap, Shield, Cpu, Box, HardDrive, Heart } from 'lucide-vue-next';
 import type { AttributeType, PlayerGenome } from '../types';
 import { calculateMaintenanceCost } from '../utils';
+import AttributeIcon from './AttributeIcon.vue';
 
 interface Props {
   genome: PlayerGenome;
@@ -120,7 +121,7 @@ const getSlotClass = (attrType: AttributeType, i: number, colorClass: string) =>
       <div v-for="attr in attributes" :key="attr.type" class="group">
         <div class="flex justify-between items-end mb-2">
           <div class="flex items-center gap-2">
-            <component :is="attr.icon" class="w-4 h-4" :class="attr.color" />
+            <AttributeIcon :type="attr.type" class="w-4 h-4" :class="attr.color" />
             <span class="text-xs font-bold uppercase tracking-widest" :class="attr.color">
               {{ attr.label }}
             </span>
