@@ -21,7 +21,7 @@
         "@originjs/vite-plugin-federation": "^1.4.1",
         "@tailwindcss/postcss": "^4.2.1",
         "@types/node": "^25.3.5",
-        "@vitejs/plugin-vue": "^5.2.4",
+        "@vitejs/plugin-vue": "^6.0.4",
         "postcss": "^8.5.8",
         "tailwindcss": "^4.2.1",
         "typescript": "~5.7.3",
