@@ -1,39 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import ApexNebula from './ApexNebula.vue';
 import type { PlayerInfo, SimpleConnection } from '@mykoboard/integration';
+import { createLocalWebRTCPair } from '@mykoboard/integration';
 import { INITIAL_EVENT_DECK } from './eventUtils';
 import { ChevronDown } from 'lucide-vue-next';
-
-// Mock connection for standalone testing
-class MockConnection implements SimpleConnection {
-  id: string;
-  public listeners: ((data: string) => void)[] = [];
-
-  constructor(id: string) {
-    this.id = id;
-  }
-
-  send(data: string): void {
-    console.log('Mock send:', data);
-  }
-
-  addMessageListener(callback: (data: string) => void): void {
-    this.listeners.push(callback);
-  }
-
-  removeMessageListener(callback: (data: string) => void): void {
-    this.listeners = this.listeners.filter((l) => l !== callback);
-  }
-}
 
 const mockPlayers: PlayerInfo[] = [
   { id: 'player1', name: 'Alpha AI', status: 'game', isConnected: true, isLocal: true, isHost: true },
   { id: 'player2', name: 'Beta AI', status: 'game', isConnected: true, isLocal: false, isHost: false },
 ];
 
-const mockConnections = ref([new MockConnection('conn1')]);
+const mockConnections = ref<SimpleConnection[]>([]);
+let remoteProxy: SimpleConnection | null = null;
 const showEvents = ref(false);
+
+onMounted(async () => {
+  const [connA, connB] = await createLocalWebRTCPair();
+  // Alpha AI uses connA to communicate with the world
+  mockConnections.value = [connA];
+  // We keep connB as a way to simulate incoming messages for connA
+  remoteProxy = connB;
+});
 
 const handleAddLedger = (action: { type: string; payload: any }) => {
   console.log('Add to ledger:', action);
@@ -46,14 +34,14 @@ const handleFinishGame = () => {
 
 const forceEvent = (eventId: string) => {
   const message = { namespace: 'game', type: 'FORCE_EVENT', payload: { eventId }, senderId: 'debug' };
-  mockConnections.value[0].listeners.forEach((l) => l(JSON.stringify(message)));
+  remoteProxy?.send(JSON.stringify(message));
   showEvents.value = false;
 };
 
 const startGame = () => {
   const seed = Math.floor(Math.random() * 1000000);
   const message = { namespace: 'game', type: 'START_GAME', payload: { seed }, senderId: 'debug' };
-  mockConnections.value[0].listeners.forEach((l) => l(JSON.stringify(message)));
+  remoteProxy?.send(JSON.stringify(message));
 };
 
 const forceBetaAIDistribution = () => {
@@ -81,24 +69,25 @@ const forceBetaAIDistribution = () => {
         },
         senderId: 'debug',
       };
-      mockConnections.value[0].listeners.forEach((l) => l(JSON.stringify(message)));
+      // Beta AI messages arrive from "remote"
+      remoteProxy?.send(JSON.stringify(message));
     }
   });
 };
 
 const betaAIConfirm = () => {
   const message = { namespace: 'game', type: 'CONFIRM_PHASE', payload: { playerId: 'player2' }, senderId: 'debug' };
-  mockConnections.value[0].listeners.forEach((l) => l(JSON.stringify(message)));
+  remoteProxy?.send(JSON.stringify(message));
 };
 
 const betaAIFinish = () => {
   const message = { namespace: 'game', type: 'FINISH_TURN', payload: { playerId: 'player2' }, senderId: 'debug' };
-  mockConnections.value[0].listeners.forEach((l) => l(JSON.stringify(message)));
+  remoteProxy?.send(JSON.stringify(message));
 };
 
 const betaAIOptConfirm = () => {
   const message = { namespace: 'game', type: 'CONFIRM_PHASE', payload: { playerId: 'player2' }, senderId: 'debug' };
-  mockConnections.value[0].listeners.forEach((l) => l(JSON.stringify(message)));
+  remoteProxy?.send(JSON.stringify(message));
 };
 </script>
 
