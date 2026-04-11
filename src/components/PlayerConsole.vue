@@ -53,8 +53,11 @@ const getSlotClass = (attrType: AttributeType, i: number, colorClass: string) =>
   
   let classes = 'flex-1 h-full rounded-sm border transition-all duration-300 relative group/slot ';
   
-  if (props.editable && (props.setupLimit ? i < props.setupLimit : i >= currentValue || i === currentValue - 1)) {
-    classes += 'cursor-pointer hover:ring-2 hover:ring-white/30 hover:scale-[1.05] hover:z-10 ';
+  const canInteract = props.editable && (props.setupLimit ? i < props.setupLimit : i >= currentValue || i === currentValue - 1);
+
+  if (canInteract) {
+    const hoverBg = colorClass.replace('text', 'hover:bg').replace('-400', '-500/25');
+    classes += `cursor-pointer hover:ring-2 hover:ring-white/30 hover:scale-[1.05] hover:z-10 ${hoverBg} `;
   } else {
     classes += 'cursor-not-allowed opacity-40 ';
   }
@@ -118,8 +121,8 @@ const getSlotClass = (attrType: AttributeType, i: number, colorClass: string) =>
 
     <!-- Attribute Tracks -->
     <div class="space-y-6 mb-8">
-      <div v-for="attr in attributes" :key="attr.type" class="group">
-        <div class="flex justify-between items-end mb-2">
+      <div v-for="attr in attributes" :key="attr.type" class="group/row">
+        <div class="flex justify-between items-end mb-2 px-2 py-1 rounded-lg transition-colors group-hover/row:bg-white/5">
           <div class="flex items-center gap-2">
             <AttributeIcon :type="attr.type" class="w-4 h-4" :class="attr.color" />
             <span class="text-xs font-bold uppercase tracking-widest" :class="attr.color">

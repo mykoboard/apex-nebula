@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './index.css';
 import uiGuide from './assets/ui-guide.png';
 </script>
 

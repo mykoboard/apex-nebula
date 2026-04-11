@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
+import './index.css';
 import { useMachine } from '@xstate/vue';
 import { createGameMessage, isGameMessage } from '@mykoboard/integration';
 import type { GameProps } from '@mykoboard/integration';

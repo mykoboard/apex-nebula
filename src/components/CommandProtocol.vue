@@ -218,7 +218,7 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
               :key="attr"
               @click="handleAction('PRUNE_ATTRIBUTE', { playerId: localPlayer?.id, attribute: attr })"
               :disabled="!localGenome || localGenome.baseAttributes[attr] <= 1 || confirmedLocal"
-              class="h-10 text-[8px] font-black uppercase border-white/5 bg-black/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all rounded-md border flex flex-col items-center justify-center gap-1"
+              class="h-10 text-[8px] font-black uppercase border-white/5 bg-black/20 hover:bg-red-500/40 hover:text-white hover:border-red-500/50 transition-all rounded-md border flex flex-col items-center justify-center gap-1"
             >
               <AttributeIcon :type="attr" size="12" />
               <span>Prune {{ attr }}</span>

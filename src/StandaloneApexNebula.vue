@@ -139,7 +139,7 @@ const forceAllReady = async () => {
 </script>
 
 <template>
-  <div class="relative">
+  <div class="relative min-h-screen bg-[#020617] text-white">
     <!-- Standalone Debug Toolbar -->
     <div
       class="fixed top-4 right-4 z-[100] flex flex-col gap-2 p-2 bg-slate-900/90 backdrop-blur border border-white/10 rounded-2xl shadow-2xl max-w-sm"

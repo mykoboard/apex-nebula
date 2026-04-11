@@ -170,11 +170,11 @@ const gridWithData = computed(() => {
               <span v-if="hex.threshold > 0" class="text-[14px] font-black text-white leading-none mb-1">
                 {{ hex.threshold }}
               </span>
-              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center">
+              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center bg-black/60 px-2 py-1 rounded-lg border border-white/10 backdrop-blur-md shadow-lg">
                 <template v-if="Array.isArray(hex.targetAttribute)">
-                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="8" class="text-slate-400" />
+                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="10" class="text-white drop-shadow-sm" />
                 </template>
-                <AttributeIcon v-else :type="hex.targetAttribute" size="10" class="text-slate-400" />
+                <AttributeIcon v-else :type="hex.targetAttribute" size="12" class="text-white drop-shadow-sm" />
               </div>
             </div>
           </foreignObject>
