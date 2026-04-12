@@ -20,6 +20,7 @@ export const apexNebulaMachine = createMachine({
     id: 'apexNebula',
     initial: 'waitingForPlayers',
     context: ({ input }: { input: any }) => ({
+        localPlayerId: input?.localPlayerId ?? '',
         players: input?.players ?? [],
         currentPlayerIndex: 0,
         genomes: input?.genomes ?? [],
@@ -101,10 +102,10 @@ export const apexNebulaMachine = createMachine({
         },
         mutationPhase: {
             entry: [
-                assign(({ event }) => event.type === 'SYNC_STATE' ? {} : {
+                assign({
                     gamePhase: 'mutation' as const,
                     currentPlayerIndex: 0,
-                    confirmedPlayers: []
+                    confirmedPlayers: [] as string[]
                 }),
                 'applyAllMutations',
                 () => console.log('Machine State: mutationPhase (Mutations Auto-Applied)')
@@ -124,11 +125,11 @@ export const apexNebulaMachine = createMachine({
         },
         phenotypePhase: {
             entry: [
-                assign(({ event }) => event.type === 'SYNC_STATE' ? {} : {
+                assign({
                     gamePhase: 'phenotype' as const,
-                    confirmedPlayers: [],
+                    confirmedPlayers: [] as string[],
                     currentPlayerIndex: 0,
-                    phenotypeActions: {}
+                    phenotypeActions: {} as Record<string, { movesMade: number; harvestDone: boolean }>
                 }),
                 () => console.log('Machine State: phenotypePhase')
             ],
@@ -172,7 +173,7 @@ export const apexNebulaMachine = createMachine({
             },
         },
         optimizationPhase: {
-            entry: assign(({ event }) => event.type === 'SYNC_STATE' ? {} : { gamePhase: 'optimization' as const, confirmedPlayers: [] }),
+            entry: assign({ gamePhase: 'optimization' as const, confirmedPlayers: [] as string[] }),
             on: {
                 OPTIMIZE_DATA: {
                     actions: 'optimizeData',
@@ -221,15 +222,6 @@ export const apexNebulaMachine = createMachine({
         },
     },
     on: {
-        SYNC_STATE: [
-            { target: '.setupPhase', guard: ({ event }) => event.context.gamePhase === 'setup', actions: 'syncState' },
-            { target: '.mutationPhase', guard: ({ event }) => event.context.gamePhase === 'mutation', actions: 'syncState' },
-            { target: '.phenotypePhase', guard: ({ event }) => event.context.gamePhase === 'phenotype', actions: 'syncState' },
-            { target: '.environmentalPhase', guard: ({ event }) => event.context.gamePhase === 'environmental', actions: 'syncState' },
-            { target: '.competitivePhase', guard: ({ event }) => event.context.gamePhase === 'competitive', actions: 'syncState' },
-            { target: '.optimizationPhase', guard: ({ event }) => event.context.gamePhase === 'optimization', actions: 'syncState' },
-            { actions: 'syncState' }
-        ],
         FORCE_EVENT: {
             target: '.environmentalPhase',
             actions: 'forceEnvironmentalEvent',
@@ -237,13 +229,6 @@ export const apexNebulaMachine = createMachine({
     },
 }, {
     actions: {
-        syncState: assign(({ event }) => {
-            if (event.type !== 'SYNC_STATE') return {};
-            return {
-                ...event.context,
-                seed: event.seed ?? event.context.seed
-            };
-        }),
 
         calculateInitialPriority: assign(({ context }) => {
             const prng = createPRNG(context.seed || 12345);
@@ -290,8 +275,7 @@ export const apexNebulaMachine = createMachine({
             };
         }),
 
-        applyAllMutations: assign(({ context, event }) => {
-            if (event.type === 'SYNC_STATE') return {};
+        applyAllMutations: assign(({ context }) => {
             const attributeMap: AttributeType[] = ['NAV', 'LOG', 'DEF', 'SCN'];
             const newResults: Record<string, any> = {};
 
@@ -493,8 +477,7 @@ export const apexNebulaMachine = createMachine({
             };
         }),
 
-        drawEnvironmentalEvent: assign(({ context, event }) => {
-            if (event.type === 'SYNC_STATE') return {};
+        drawEnvironmentalEvent: assign(({ context }) => {
             if (context.currentEvent) return {}; // Skip if already forced
 
             let currentDeck = context.eventDeck;
@@ -860,6 +843,7 @@ export const apexNebulaMachine = createMachine({
             round: context.round + 1,
             currentPlayerIndex: 0,
             mutationResults: {}, // Reset for next round
+            phenotypeActions: {}, // Clear stale movement data from previous round
             genomes: context.genomes.map(g => ({
                 ...g,
                 tempAttributeModifiers: { ...EMPTY_MODS }
@@ -919,7 +903,8 @@ export const apexNebulaMachine = createMachine({
                         rawMatter: Math.min(2, g.rawMatter), // Cap at 2, deduction already happened in confirmPhase
                     };
                 }),
-                lastHarvestResults: []
+                lastHarvestResults: [],
+                phenotypeActions: {} // Clear stale movement data
             };
         }),
 

@@ -88,6 +88,7 @@ export interface Player {
 }
 
 export interface ApexNebulaContext {
+    localPlayerId: string;
     players: Player[];
     currentPlayerIndex: number;
     genomes: PlayerGenome[];
@@ -113,18 +114,138 @@ export interface ApexNebulaContext {
     lastEventResults?: Record<string, { roll: number; modifier: number; success: boolean }>;
 }
 
+// ── Game Events ─────────────────────────────────────────────────────────────
+// Each event is an individually typed interface grouped by game phase.
+// The composite `ApexNebulaEvent` union is derived from them.
+//
+// Usage:
+//   import type { MovePlayerEvent, EventPayload } from '@/types';
+//   const payload: EventPayload<'MOVE_PLAYER'> = { playerId, hexId };
+
+// ── Lifecycle ───────────────────────────────────────────────────────────────
+
+/** Initializes the game — creates genomes, places pieces, sets seed. */
+export interface StartGameEvent {
+    type: 'START_GAME';
+    /** PRNG seed for deterministic replay across peers. */
+    seed?: number;
+    /** Ordered list of players; index determines home nebula slot. */
+    players: Player[];
+}
+
+/** Resets the game back to mutationPhase with fresh genomes. */
+export interface ResetEvent {
+    type: 'RESET';
+}
+
+// ── Setup Phase ─────────────────────────────────────────────────────────────
+
+/** Distributes cubes from the pool to a genome attribute during setup. */
+export interface DistributeCubesEvent {
+    type: 'DISTRIBUTE_CUBES';
+    playerId: string;
+    attribute: AttributeType;
+    /** Number of cubes to move from pool → attribute. */
+    amount: number;
+}
+
+// ── Shared / Multi-Phase ────────────────────────────────────────────────────
+
+/** Player confirms they are done with the current phase. Idempotent. */
+export interface ConfirmPhaseEvent {
+    type: 'CONFIRM_PHASE';
+    playerId: string;
+}
+
+/** Advances to the next phase. Used in environmental → competitive → optimization. */
+export interface NextPhaseEvent {
+    type: 'NEXT_PHASE';
+}
+
+// ── Mutation Phase ──────────────────────────────────────────────────────────
+
+/** Triggers the mutation roll sequence (currently auto-applied on phase entry). */
+export interface InitiateMutationEvent {
+    type: 'INITIATE_MUTATION';
+}
+
+// ── Phenotype Phase ─────────────────────────────────────────────────────────
+
+/** Moves the active player's piece to an adjacent hex and triggers harvest. */
+export interface MovePlayerEvent {
+    type: 'MOVE_PLAYER';
+    playerId: string;
+    /** Target hex ID (must be adjacent, distance=1). */
+    hexId: string;
+}
+
+/** Ends the active player's phenotype turn. */
+export interface FinishTurnEvent {
+    type: 'FINISH_TURN';
+    playerId: string;
+}
+
+/** Spends insight tokens for a re-roll or bonus. */
+export interface SpendInsightEvent {
+    type: 'SPEND_INSIGHT';
+    playerId: string;
+    amount: number;
+}
+
+// ── Environmental Phase ─────────────────────────────────────────────────────
+
+/** Forces a specific environmental event card (debug / host override). */
+export interface ForceEventEvent {
+    type: 'FORCE_EVENT';
+    /** ID of the environmental event to force-draw. */
+    eventId: string;
+}
+
+// ── Competitive Phase ───────────────────────────────────────────────────────
+
+/** One player hustles another — attribute contest resolved by dice. */
+export interface HustleEvent {
+    type: 'HUSTLE';
+    attackerId: string;
+    defenderId: string;
+    /** Attribute category used for the contest. */
+    category: string;
+}
+
+// ── Optimization Phase ──────────────────────────────────────────────────────
+
+/** Removes 1 point from an attribute, gaining 2 raw matter. */
+export interface PruneAttributeEvent {
+    type: 'PRUNE_ATTRIBUTE';
+    playerId: string;
+    attribute: AttributeType;
+}
+
+/** Spends 3 data clusters to gain 1 cube back into the pool. */
+export interface OptimizeDataEvent {
+    type: 'OPTIMIZE_DATA';
+    playerId: string;
+}
+
+// ── Composite Union ─────────────────────────────────────────────────────────
+
 export type ApexNebulaEvent =
-    | { type: 'SYNC_STATE'; context: ApexNebulaContext; seed?: number }
-    | { type: 'MOVE_PLAYER'; playerId: string; hexId: string }
-    | { type: 'SPEND_INSIGHT'; playerId: string; amount: number }
-    | { type: 'DISTRIBUTE_CUBES'; playerId: string; attribute: AttributeType; amount: number }
-    | { type: 'INITIATE_MUTATION' }
-    | { type: 'FINISH_TURN'; playerId: string }
-    | { type: 'CONFIRM_PHASE'; playerId: string }
-    | { type: 'HUSTLE'; attackerId: string; defenderId: string; category: string }
-    | { type: 'PRUNE_ATTRIBUTE'; playerId: string; attribute: AttributeType }
-    | { type: 'OPTIMIZE_DATA'; playerId: string }
-    | { type: 'NEXT_PHASE' }
-    | { type: 'FORCE_EVENT'; eventId: string }
-    | { type: 'START_GAME'; seed?: number; players: Player[] }
-    | { type: 'RESET' };
+    | StartGameEvent
+    | ResetEvent
+    | DistributeCubesEvent
+    | ConfirmPhaseEvent
+    | NextPhaseEvent
+    | InitiateMutationEvent
+    | MovePlayerEvent
+    | FinishTurnEvent
+    | SpendInsightEvent
+    | ForceEventEvent
+    | HustleEvent
+    | PruneAttributeEvent
+    | OptimizeDataEvent;
+
+/** Extracts the payload fields (everything except `type`) for a given event type string. */
+export type EventPayload<T extends ApexNebulaEvent['type']> = Omit<
+    Extract<ApexNebulaEvent, { type: T }>,
+    'type'
+>;

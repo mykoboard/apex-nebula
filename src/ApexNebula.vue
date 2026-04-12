@@ -5,8 +5,7 @@ import { useMachine } from '@xstate/vue';
 import { createGameMessage, isGameMessage } from '@mykoboard/integration';
 import type { GameProps } from '@mykoboard/integration';
 import { apexNebulaMachine } from './apexNebulaMachine';
-import type { Color, Player, AttributeType } from './types';
-import { calculateMaintenanceCost } from './utils';
+import type { Color, Player} from './types';
 
 import HexGrid from './components/HexGrid.vue';
 import PlayerConsole from './components/PlayerConsole.vue';
@@ -16,7 +15,7 @@ import PhaseIndicator from './components/PhaseIndicator.vue';
 import CommandProtocol from './components/CommandProtocol.vue';
 import SingularityWonScreen from './components/SingularityWonScreen.vue';
 
-import { Dna, Dice6, Zap, Crown } from 'lucide-vue-next';
+import { Dna, Crown } from 'lucide-vue-next';
 
 const props = defineProps<GameProps>();
 
@@ -38,8 +37,15 @@ const players = computed<Player[]>(() => {
   }));
 });
 
+// Resolve local player ID once from playerInfos — this becomes the machine's source of truth
+const resolvedLocalPlayerId = (() => {
+  const local = props.playerInfos.find((p) => p.isLocal);
+  return local?.id ?? '';
+})();
+
 const { snapshot, send } = useMachine(apexNebulaMachine, {
   input: {
+    localPlayerId: resolvedLocalPlayerId,
     players: players.value,
     genomes: players.value.map((p) => ({
       playerId: p.id,
@@ -68,19 +74,11 @@ const { snapshot, send } = useMachine(apexNebulaMachine, {
 
 const state = snapshot;
 
-const localPlayerInfo = computed(() => props.playerInfos.find((p) => p.isLocal));
-
-const machineLocalPlayer = computed<Player | null>(() => {
-  return (
-    state.value.context.players.find(
-      (p: Player) =>
-        (p.publicKey && localPlayerInfo.value?.publicKey && p.publicKey === localPlayerInfo.value.publicKey) ||
-        p.id === localPlayerInfo.value?.id
-    ) || null
-  );
+// Derive local player directly from the machine's authoritative localPlayerId
+const localPlayer = computed<Player | null>(() => {
+  const lpId = state.value.context.localPlayerId;
+  return state.value.context.players.find((p: Player) => p.id === lpId) || null;
 });
-
-const localPlayer = computed(() => machineLocalPlayer.value);
 const localGenome = computed(() => state.value.context.genomes.find((g: any) => g.playerId === localPlayer.value?.id));
 const activePlayerId = computed(() => state.value.context.turnOrder[state.value.context.currentPlayerIndex]);
 const currentPlayer = computed(() => {
@@ -90,15 +88,15 @@ const currentPlayer = computed(() => {
 const isLocalPlayerTurn = computed(() => !!(localPlayer.value && activePlayerId.value === localPlayer.value.id));
 const otherPlayers = computed(() => state.value.context.players.filter((p: Player) => p.id !== localPlayer.value?.id));
 
-// WebRTC message handling
+// WebRTC message handling — apply received peer events to local machine
 const handleMessage = (data: string) => {
   try {
     const message = JSON.parse(data);
     if (isGameMessage(message)) {
       send({ type: message.type as any, ...message.payload });
 
-      // If Host receives an action from a Guest, it should persist it to the ledger (except state syncs)
-      if (props.isInitiator && message.type !== 'SYNC_STATE') {
+      // Host records all peer actions to the ledger
+      if (props.isInitiator) {
         props.onAddLedger({ type: message.type, payload: message.payload });
       }
     }
@@ -122,54 +120,46 @@ watch(
   { immediate: true }
 );
 
-// Start game for host once players are ready
+// Start game for host once players are ready — broadcast so guest initializes identically
 watch(
   () => [props.isInitiator, state.value.matches('waitingForPlayers'), players.value.length] as const,
   ([isInitiator, isWaiting, playerLen]: readonly [boolean, boolean, number]) => {
     if (isInitiator && isWaiting && playerLen > 0) {
+      const seed = state.value.context.seed || Date.now();
+      const startPayload = { seed, players: players.value };
+
       console.log('[ApexNebula] Auto-triggering START_GAME with', playerLen, 'players');
-      send({
-        type: 'START_GAME',
-        seed: state.value.context.seed || Date.now(),
-        players: players.value,
-      });
+      send({ type: 'START_GAME', ...startPayload });
+
+      // Broadcast so the guest machine transitions identically
+      const message = createGameMessage('START_GAME', startPayload);
+      props.connections.forEach((conn) => conn.send(JSON.stringify(message)));
     }
   },
   { immediate: true }
 );
 
-// Sync state changes to other players
-watch(
-  () => state.value.context,
-  (context) => {
-    if (props.isInitiator && context.players.length > 0) {
-      const message = createGameMessage('SYNC_STATE', { context });
-      props.connections.forEach((conn) => {
-        conn.send(JSON.stringify(message));
-      });
-    }
-  },
-  { deep: true }
-);
-
+// Replicated event dispatch — process locally AND broadcast to peers.
+// No host/guest distinction: every peer runs the same machine logic.
 const handleAction = (actionType: string, payload: any) => {
+  // Ownership gate: if the action carries a playerId, it must match localPlayerId.
+  // Events without playerId (NEXT_PHASE, INITIATE_MUTATION, etc.) pass through.
+  const lpId = state.value.context.localPlayerId;
+  if (payload?.playerId && payload.playerId !== lpId) {
+    console.warn(`[handleAction] Blocked ${actionType}: payload.playerId=${payload.playerId} !== localPlayerId=${lpId}`);
+    return;
+  }
+
+  // 1. Process locally
+  send({ type: actionType as any, ...payload });
+
+  // 2. Broadcast to all peers
+  const message = createGameMessage(actionType, payload);
+  props.connections.forEach((conn) => conn.send(JSON.stringify(message)));
+
+  // 3. Record to ledger (host only)
   if (props.isInitiator) {
-    send({ type: actionType as any, ...payload });
-
-    if (state.value.matches('setupPhase') && actionType === 'DISTRIBUTE_CUBES') {
-      const { playerId, amount } = payload;
-      props.onAddLedger({ type: actionType, payload: { playerId, amount } });
-      return;
-    }
-
     props.onAddLedger({ type: actionType, payload });
-  } else {
-    // Guest sends WebRTC message to Host instead of trying to add to ledger
-    const message = createGameMessage(actionType, payload);
-    props.connections.forEach((conn) => conn.send(JSON.stringify(message)));
-
-    // Optimistically dispatch locally so UI updates instantly
-    send({ type: actionType as any, ...payload });
   }
 };
 
