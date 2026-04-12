@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Dice6, Zap, Crown, Dna } from 'lucide-vue-next';
+import { Dice6, Zap, Crown, Dna, AlertTriangle, Radio } from 'lucide-vue-next';
 import type { Player, AttributeType } from '../types';
 import { calculateMaintenanceCost } from '../utils';
 import AttributeIcon from './AttributeIcon.vue';
+
 
 const props = defineProps<{
   state: any;
@@ -19,28 +20,88 @@ const emit = defineEmits<{
 }>();
 
 const handleAction = (type: string, payload: any) => emit('action', type, payload);
-const confirmedLocal = computed(() => props.state.context.confirmedPlayers.includes(props.localPlayer?.id || ''));
+const confirmedLocal = computed(() => props.state.context.confirmedPlayers.includes(props.localPlayer?.publicKey || ''));
+
+// Robust reactive phase checks
+const isWaiting = computed(() => props.state.matches('waitingForPlayers'));
+const isSetup = computed(() => props.state.matches('setupPhase'));
+const isMutation = computed(() => props.state.matches('mutationPhase'));
+const isPhenotype = computed(() => props.state.matches('phenotypePhase'));
+const isEnvironmental = computed(() => props.state.matches('environmentalPhase'));
+const isCompetitive = computed(() => props.state.matches('competitivePhase'));
+const isOptimization = computed(() => props.state.matches('optimizationPhase'));
 </script>
+
 
 <template>
   <div class="bg-white/5 rounded-[2rem] p-6 border border-white/5 backdrop-blur-xl shadow-inner group transition-all hover:bg-white/[0.07]">
     <div class="flex items-center justify-between mb-6">
       <h3 class="text-sm font-black uppercase tracking-[0.1em] text-white">
-        {{ isLocalPlayerTurn ? 'Awaiting Input' : (currentPlayer ? `${currentPlayer.name}'s Cycle` : 'Initialization Cycle') }}
+        {{ 
+          isLocalPlayerTurn 
+            ? 'Awaiting Input' 
+            : (isSetup || isOptimization)
+            ? 'Parallel Protocol'
+            : (currentPlayer ? `${currentPlayer.name}'s Cycle` : 'Initialization Cycle') 
+        }}
       </h3>
+
       <div class="text-[10px] font-black text-purple-400 uppercase tracking-widest px-3 py-1 bg-purple-500/10 rounded-full ring-1 ring-purple-500/30">
         {{ state.context.gamePhase }}
       </div>
     </div>
 
+
+    <div v-if="!localPlayer" class="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
+      <div class="flex items-center gap-2 text-red-400 font-black text-[10px] uppercase">
+        <AlertTriangle class="w-4 h-4" />
+        Identity Resolution Failed
+      </div>
+      <p class="text-[9px] text-red-500/70 leading-relaxed uppercase font-bold tracking-tight">
+        Local player not identified in synchronization grid. Handshake with host requires active public key.
+      </p>
+    </div>
+
     <div class="space-y-4">
+      <div v-if="isWaiting" class="space-y-4">
+
+        <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Links</span>
+          <span class="text-xs font-black text-white">{{ state.context.players.length }} / 4</span>
+        </div>
+        <div v-if="!isInitiator" class="p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10 flex items-center gap-3">
+          <Radio class="w-4 h-4 text-indigo-400 animate-pulse" />
+          <div class="flex flex-col">
+            <span class="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Neural Link Active</span>
+            <span class="text-[7px] text-slate-500 uppercase font-bold">Synchronizing with host protocol...</span>
+          </div>
+        </div>
+        <p class="text-[10px] text-slate-400 leading-relaxed italic">
+          {{ isInitiator ? 'Establish cryptographic handshake to begin simulation.' : 'Awaiting host authorization to initiate Genome Configuration.' }}
+        </p>
+        <button
+          v-if="isInitiator"
+          @click="handleAction('START_GAME', { seed: Date.now(), players: state.context.players })"
+          class="w-full h-10 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
+        >
+          <Zap class="w-4 h-4" />
+          Initiate Protocol
+        </button>
+        <div v-else class="w-full h-10 flex items-center justify-center gap-2 bg-slate-800/50 rounded-xl border border-white/5">
+          <div class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+          <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Awaiting Launch Command</span>
+        </div>
+      </div>
+
+
       <!-- Setup Phase -->
-      <div v-if="state.matches('setupPhase')" class="space-y-4">
+      <div v-if="isSetup" class="space-y-4">
+
         <p class="text-[10px] text-slate-400 leading-relaxed italic">
           Distribute 12 cubes to initialize your configuration.
         </p>
         <button
-          @click="handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })"
+          @click="handleAction('CONFIRM_PHASE', { playerPublicKey: localPlayer?.publicKey })"
           :disabled="!localGenome || localGenome.cubePool > 0 || confirmedLocal"
           class="w-full uppercase font-black tracking-widest text-[10px] h-10 rounded-xl transition-all"
           :class="[
@@ -56,55 +117,56 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
       </div>
 
       <!-- Mutation Phase -->
-      <div v-if="state.matches('mutationPhase')" class="space-y-4">
+      <div v-if="isMutation" class="space-y-4">
+
         <h5 class="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
           <Zap class="w-3 h-3" />
           Mutation Sync
         </h5>
         <div v-if="Object.keys(state.context.mutationResults).length < state.context.players.length" class="space-y-2">
           <p class="text-[10px] text-slate-400 italic">
-            Systems entering radiation zone. {{ state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'Initiate sequence.' : 'Awaiting turn...' }}
+            Systems entering radiation zone. {{ state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.publicKey ? 'Initiate sequence.' : 'Awaiting turn...' }}
           </p>
           <button
             @click="handleAction('INITIATE_MUTATION', {})"
-            :disabled="state.context.turnOrder[state.context.currentPlayerIndex] !== localPlayer?.id"
+            :disabled="state.context.turnOrder[state.context.currentPlayerIndex] !== localPlayer?.publicKey"
             class="w-full h-10 uppercase font-black tracking-widest text-[10px] rounded-xl transition-all flex items-center justify-center gap-2"
             :class="[
-              state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id
+              state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.publicKey
                 ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
             ]"
           >
             <Dice6 class="w-4 h-4" />
-            {{ state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.id ? 'Initiate' : 'Awaiting...' }}
+            {{ state.context.turnOrder[state.context.currentPlayerIndex] === localPlayer?.publicKey ? 'Initiate' : 'Awaiting...' }}
           </button>
         </div>
         <div v-else class="space-y-4">
           <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
-            <template v-for="p in state.context.players" :key="p.id">
-              <div v-if="state.context.mutationResults[p.id]" class="bg-slate-900/50 p-2 rounded-lg border border-white/5 space-y-1">
+            <template v-for="p in state.context.players" :key="p.publicKey">
+              <div v-if="state.context.mutationResults[p.publicKey]" class="bg-slate-900/50 p-2 rounded-lg border border-white/5 space-y-1">
                 <div class="flex justify-between items-center">
                   <span class="text-[8px] font-bold text-slate-400 uppercase">{{ p.name }}</span>
                   <div class="flex gap-1">
                     <div class="px-1 bg-indigo-500/20 rounded text-[8px] font-black text-indigo-400">
-                      {{ state.context.mutationResults[p.id].attrRoll }}
+                      {{ state.context.mutationResults[p.publicKey].attrRoll }}
                     </div>
                     <div class="px-1 bg-purple-500/20 rounded text-[8px] font-black text-purple-400" title="Current Roll">
-                      {{ state.context.mutationResults[p.id].magnitude > 0 ? '+' : '' }}{{ state.context.mutationResults[p.id].magnitude }}
+                      {{ state.context.mutationResults[p.publicKey].magnitude > 0 ? '+' : '' }}{{ state.context.mutationResults[p.publicKey].magnitude }}
                     </div>
-                    <div v-if="state.context.genomes.find((g: any) => g.playerId === p.id)" class="px-1 bg-emerald-500/20 rounded text-[8px] font-black text-emerald-400" title="Total Modifier">
-                      Σ {{ (state.context.genomes.find((g: any) => g.playerId === p.id)?.mutationModifiers?.[state.context.mutationResults[p.id].attr] ?? 0) > 0 ? '+' : '' }}{{ state.context.genomes.find((g: any) => g.playerId === p.id)?.mutationModifiers?.[state.context.mutationResults[p.id].attr] ?? 0 }}
+                    <div v-if="state.context.genomes.find((g: any) => g.playerPublicKey === p.publicKey)" class="px-1 bg-emerald-500/20 rounded text-[8px] font-black text-emerald-400" title="Total Modifier">
+                      Σ {{ (state.context.genomes.find((g: any) => g.playerPublicKey === p.publicKey)?.mutationModifiers?.[state.context.mutationResults[p.publicKey].attr] ?? 0) > 0 ? '+' : '' }}{{ state.context.genomes.find((g: any) => g.playerPublicKey === p.publicKey)?.mutationModifiers?.[state.context.mutationResults[p.publicKey].attr] ?? 0 }}
                     </div>
                   </div>
                 </div>
                 <div class="text-[9px] font-black uppercase tracking-tight text-white/70">
-                  {{ state.context.mutationResults[p.id].attr }}: {{ state.context.mutationResults[p.id].magnitude >= 0 ? '+' : '' }}{{ state.context.mutationResults[p.id].magnitude }}
+                  {{ state.context.mutationResults[p.publicKey].attr }}: {{ state.context.mutationResults[p.publicKey].magnitude >= 0 ? '+' : '' }}{{ state.context.mutationResults[p.publicKey].magnitude }}
                 </div>
               </div>
             </template>
           </div>
           <button
-            @click="handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })"
+            @click="handleAction('CONFIRM_PHASE', { playerPublicKey: localPlayer?.publicKey })"
             :disabled="confirmedLocal"
             class="w-full uppercase font-black tracking-widest text-[10px] h-10 rounded-xl transition-all"
             :class="[
@@ -119,16 +181,17 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
       </div>
 
       <!-- Phenotype Phase -->
-      <div v-if="state.matches('phenotypePhase')" class="space-y-4">
+      <div v-if="isPhenotype" class="space-y-4">
+
         <div v-if="isLocalPlayerTurn" class="space-y-3">
           <div class="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-center">
             <p class="text-[10px] font-black text-indigo-400 uppercase">Movement Active</p>
             <p class="text-xs font-black text-white">
-              {{ Math.max(0, (localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) + (localGenome?.tempAttributeModifiers.NAV || 0) - (state.context.phenotypeActions[localPlayer?.id!]?.movesMade || 0)) }} Units
+              {{ Math.max(0, (localGenome?.baseAttributes.NAV || 0) + (localGenome?.mutationModifiers.NAV || 0) + (localGenome?.tempAttributeModifiers.NAV || 0) - (state.context.phenotypeActions[localPlayer?.publicKey!]?.movesMade || 0)) }} Units
             </p>
           </div>
           <button
-            @click="handleAction('FINISH_TURN', { playerId: localPlayer?.id })"
+            @click="handleAction('FINISH_TURN', { playerPublicKey: localPlayer?.publicKey })"
             class="w-full h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-[10px] uppercase tracking-widest border border-white/10"
           >
             Finalize Turn
@@ -139,14 +202,15 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
         </div>
       </div>
 
-      <div v-if="state.matches('phenotypePhase') && state.context.lastHarvestResults.length > 0" class="space-y-3">
+      <div v-if="isPhenotype && state.context.lastHarvestResults.length > 0" class="space-y-3">
+
         <div class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
           <div class="w-1 h-3 bg-cyan-500 rounded-full" />
           Latest Extractions
         </div>
         <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
           <div v-for="(res, i) in state.context.lastHarvestResults" :key="i" class="p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase tracking-tight" :class="res.success ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-red-500/10 border-red-500/20 text-red-400'">
-            <span class="truncate max-w-[70px]">{{ state.context.players.find((pl: Player) => pl.id === res.playerId)?.name || 'Unknown' }}</span>
+            <span class="truncate max-w-[70px]">{{ state.context.players.find((pl: Player) => pl.publicKey === res.playerPublicKey)?.name || 'Unknown' }}</span>
             <div class="flex items-center gap-2">
               <AttributeIcon :type="res.attribute as AttributeType" size="10" class="opacity-70" />
               <div class="flex items-center gap-1">
@@ -162,11 +226,12 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
       </div>
 
       <!-- Environmental Phase -->
-      <div v-if="state.matches('environmentalPhase')" class="space-y-4">
+      <div v-if="isEnvironmental" class="space-y-4">
+
         <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
           <template v-for="(res, pid) in state.context.lastEventResults" :key="pid">
             <div class="p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase tracking-tight" :class="res.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'">
-              <span class="truncate max-w-[80px]">{{ state.context.players.find((pl: Player) => pl.id === pid)?.name }}</span>
+              <span class="truncate max-w-[80px]">{{ state.context.players.find((pl: Player) => pl.publicKey === pid)?.name }}</span>
               <div class="flex items-center gap-1.5">
                 <Dice6 class="w-3 h-3 opacity-50" />
                 <span>{{ res.roll }}</span>
@@ -186,7 +251,8 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
 
       <!-- Competitive Phase -->
       <button
-        v-if="state.matches('competitivePhase') && isInitiator"
+        v-if="isCompetitive && isInitiator"
+
         @click="handleAction('NEXT_PHASE', {})"
         class="w-full h-12 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-[10px] uppercase tracking-[0.2em]"
       >
@@ -194,14 +260,15 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
       </button>
 
       <!-- Optimization Phase -->
-      <div v-if="state.matches('optimizationPhase')" class="space-y-4">
+      <div v-if="isOptimization" class="space-y-4">
+
         <div class="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl space-y-2">
           <div class="flex justify-between items-center">
             <span class="text-[10px] font-black text-indigo-400 uppercase">Data Optimization</span>
             <span class="text-[10px] font-black text-white">{{ localGenome?.dataClusters || 0 }}/3</span>
           </div>
           <button
-            @click="handleAction('OPTIMIZE_DATA', { playerId: localPlayer?.id })"
+            @click="handleAction('OPTIMIZE_DATA', { playerPublicKey: localPlayer?.publicKey })"
             :disabled="!localGenome || localGenome.dataClusters < 3 || confirmedLocal"
             class="w-full h-8 bg-indigo-600 hover:bg-indigo-500 text-[9px] uppercase font-black tracking-widest rounded-lg flex items-center justify-center"
           >
@@ -216,7 +283,7 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
             <button
               v-for="attr in (['NAV', 'LOG', 'DEF', 'SCN'] as AttributeType[])"
               :key="attr"
-              @click="handleAction('PRUNE_ATTRIBUTE', { playerId: localPlayer?.id, attribute: attr })"
+              @click="handleAction('PRUNE_ATTRIBUTE', { playerPublicKey: localPlayer?.publicKey, attribute: attr })"
               :disabled="!localGenome || localGenome.baseAttributes[attr] <= 1 || confirmedLocal"
               class="h-10 text-[8px] font-black uppercase border-white/5 bg-black/20 hover:bg-red-500/40 hover:text-white hover:border-red-500/50 transition-all rounded-md border flex flex-col items-center justify-center gap-1"
             >
@@ -229,7 +296,7 @@ const confirmedLocal = computed(() => props.state.context.confirmedPlayers.inclu
 
         <div class="pt-2">
           <button
-            @click="handleAction('CONFIRM_PHASE', { playerId: localPlayer?.id })"
+            @click="handleAction('CONFIRM_PHASE', { playerPublicKey: localPlayer?.publicKey })"
             :disabled="confirmedLocal"
             class="w-full h-12 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest"
             :class="[

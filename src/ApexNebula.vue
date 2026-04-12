@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, watch, ref } from 'vue';
 import './index.css';
 import { useMachine } from '@xstate/vue';
 import { createGameMessage, isGameMessage } from '@mykoboard/integration';
@@ -30,25 +30,24 @@ const COLORS_HEX: Record<Color, string> = {
 
 const players = computed<Player[]>(() => {
   return props.playerInfos.map((info, index) => ({
-    id: info.id,
     name: info.name,
     publicKey: info.publicKey,
     color: COLORS[index % COLORS.length],
   }));
 });
 
-// Resolve local player ID once from playerInfos — this becomes the machine's source of truth
-const resolvedLocalPlayerId = (() => {
+// Resolve local player public key reactively — this becomes the machine's source of truth
+const resolvedLocalPublicKey = computed(() => {
   const local = props.playerInfos.find((p) => p.isLocal);
-  return local?.id ?? '';
-})();
+  return local?.publicKey || '';
+});
 
 const { snapshot, send } = useMachine(apexNebulaMachine, {
   input: {
-    localPlayerId: resolvedLocalPlayerId,
+    localPublicKey: resolvedLocalPublicKey.value,
     players: players.value,
     genomes: players.value.map((p) => ({
-      playerId: p.id,
+      playerPublicKey: p.publicKey,
       stability: 3,
       dataClusters: 0,
       rawMatter: 0,
@@ -62,7 +61,7 @@ const { snapshot, send } = useMachine(apexNebulaMachine, {
     pieces: players.value.map((p, i) => {
       const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
       return {
-        playerId: p.id,
+        playerPublicKey: p.publicKey,
         hexId: starts[i % starts.length],
       };
     }),
@@ -74,66 +73,182 @@ const { snapshot, send } = useMachine(apexNebulaMachine, {
 
 const state = snapshot;
 
-// Derive local player directly from the machine's authoritative localPlayerId
+// Derive local player directly from the machine's authoritative localPublicKey
+// Fallback to resolvedLocalPublicKey if the machine hasn't synced yet
 const localPlayer = computed<Player | null>(() => {
-  const lpId = state.value.context.localPlayerId;
-  return state.value.context.players.find((p: Player) => p.id === lpId) || null;
+  // Primary: machine's authoritative context
+  const mcKey = state.value.context.localPublicKey;
+  if (mcKey) {
+    const p = state.value.context.players.find((p: Player) => p.publicKey === mcKey);
+    if (p) return p;
+  }
+  
+  // Secondary: resolved from props if machine hasn't synced yet
+  const propKey = resolvedLocalPublicKey.value;
+  if (propKey) {
+    const p = state.value.context.players.find((p: Player) => p.publicKey === propKey);
+    if (p) return p;
+  }
+
+  return null;
 });
-const localGenome = computed(() => state.value.context.genomes.find((g: any) => g.playerId === localPlayer.value?.id));
-const activePlayerId = computed(() => state.value.context.turnOrder[state.value.context.currentPlayerIndex]);
-const currentPlayer = computed(() => {
-  if (!activePlayerId.value) return null;
-  return state.value.context.players.find((p: Player) => p.id === activePlayerId.value);
+
+const localGenome = computed(() => {
+  if (!localPlayer.value) return null;
+  return state.value.context.genomes.find((g: any) => g.playerPublicKey === localPlayer.value.publicKey) || null;
 });
-const isLocalPlayerTurn = computed(() => !!(localPlayer.value && activePlayerId.value === localPlayer.value.id));
-const otherPlayers = computed(() => state.value.context.players.filter((p: Player) => p.id !== localPlayer.value?.id));
+const activePlayerPublicKey = computed(() => state.value.context.turnOrder[state.value.context.currentPlayerIndex]);
+const currentPlayer = computed(() => state.value.context.players.find((p: Player) => p.publicKey === activePlayerPublicKey.value));
+const isLocalPlayerTurn = computed(() => !!(localPlayer.value && activePlayerPublicKey.value === localPlayer.value.publicKey));
+
+// Phase helpers for template and logic parity
+const isWaiting = computed(() => state.value.matches('waitingForPlayers'));
+const isSetup = computed(() => state.value.matches('setupPhase'));
+const isOptimization = computed(() => state.value.matches('optimizationPhase'));
+
+const otherPlayers = computed(() => state.value.context.players.filter((p: Player) => p.publicKey !== localPlayer.value?.publicKey));
 
 // WebRTC message handling — apply received peer events to local machine
-const handleMessage = (data: string) => {
+const handleMessage = (data: any) => {
   try {
-    const message = JSON.parse(data);
-    if (isGameMessage(message)) {
-      send({ type: message.type as any, ...message.payload });
+    const rawMessage = typeof data === 'string' ? JSON.parse(data) : data;
+    console.log('[ApexNebula] Processing message:', rawMessage.type, rawMessage);
+    
+    // Broaden filters to catch system-level game messages
+    const isValid = isGameMessage(rawMessage) || rawMessage.namespace === 'game' || rawMessage.namespace === 'apex-nebula';
 
-      // Host records all peer actions to the ledger
+    if (isValid) {
+      console.log(`[ApexNebula] Dispatched: ${rawMessage.type}`);
+      send({ type: rawMessage.type as any, ...rawMessage.payload });
+
+      // Host specific handlers
       if (props.isInitiator) {
-        props.onAddLedger({ type: message.type, payload: message.payload });
+        // Record all peer actions to the ledger
+        props.onAddLedger({ type: rawMessage.type, payload: rawMessage.payload });
+
+        // Handle sync requests from late-joining or race-condition-hit guests
+        if (rawMessage.type === 'SYNC_REQUEST') {
+          console.log('[ApexNebula] Received SYNC_REQUEST, re-broadcasting state...');
+          broadcastCurrentState();
+        }
       }
     }
   } catch (error) {
-    console.error('Failed to parse message:', error);
+    console.error('[ApexNebula] Failed to process message:', error);
   }
 };
+
+const broadcastCurrentState = () => {
+  // If we've already started, resend the START_GAME payload
+  if (state.value.matches('setupPhase')) {
+    const startPayload = {
+      seed: state.value.context.seed || Date.now(),
+      players: players.value,
+    };
+    const message = createGameMessage('START_GAME', startPayload);
+    props.connections.forEach((conn) => {
+      console.log('[ApexNebula] Re-sending START_GAME to guest');
+      conn.send(JSON.stringify(message));
+    });
+  }
+};
+
+
+
 
 watch(
   () => props.connections,
   (conns, _, onCleanup) => {
+    console.log(`[ApexNebula] Connections watch triggered. Count: ${conns.length}`);
     conns.forEach((conn) => {
+      console.log(`[ApexNebula] Attaching listener to connection: ${conn.id || 'unknown'}`);
       conn.addMessageListener(handleMessage);
     });
+
+    // If we're a guest and just established a connection, request sync
+    if (!props.isInitiator && conns.length > 0) {
+      console.log('[ApexNebula] Guest sending SYNC_REQUEST to all connections');
+      conns.forEach((conn) => {
+        conn.send(JSON.stringify({ namespace: 'game', type: 'SYNC_REQUEST', payload: {} }));
+      });
+    }
+
     onCleanup(() => {
       conns.forEach((conn) => {
         conn.removeMessageListener(handleMessage);
       });
     });
   },
+  { immediate: true, deep: true }
+);
+
+
+
+
+const processedLedgerCount = ref(0);
+
+// Replay ledger on mount and handle updates to synchronize state machine
+watch(
+  () => (props.ledger ? [...props.ledger] : []),
+  (ledger) => {
+    console.log(`[ApexNebula] Ledger watch triggered. Total items: ${ledger.length}. Processed so far: ${processedLedgerCount.value}`);
+    if (!props.isInitiator && isWaiting.value && ledger && ledger.length > processedLedgerCount.value) {
+      const newActions = ledger.slice(processedLedgerCount.value);
+      console.log(`[ApexNebula] REPLAYING LEDGER: Found ${newActions.length} new actions to apply.`);
+      newActions.forEach((action: any) => {
+        console.log(`[ApexNebula] Replaying: ${action.type}`);
+        send({ type: action.type as any, ...action.payload });
+      });
+      processedLedgerCount.value = ledger.length;
+    }
+  },
   { immediate: true }
 );
+
+
+const confirmedLocal = computed(() => state.value.context.confirmedPlayers.includes(localPlayer.value?.publicKey || ''));
+
+
 
 // Start game for host once players are ready — broadcast so guest initializes identically
 watch(
   () => [props.isInitiator, state.value.matches('waitingForPlayers'), players.value.length] as const,
   ([isInitiator, isWaiting, playerLen]: readonly [boolean, boolean, number]) => {
-    if (isInitiator && isWaiting && playerLen > 0) {
-      const seed = state.value.context.seed || Date.now();
-      const startPayload = { seed, players: players.value };
+    // Only auto-start if there are at least 2 players joining
+    if (isInitiator && isWaiting && playerLen >= 2) {
+      console.log('[ApexNebula] Auto-triggering START_GAME with', playerLen, 'players (Delayed for guest handshake)');
+      
+      // Delay to give guest time to mount and attach listeners
+      setTimeout(() => {
+        const seed = state.value.context.seed || Date.now();
+        const startPayload = { seed, players: players.value };
 
-      console.log('[ApexNebula] Auto-triggering START_GAME with', playerLen, 'players');
-      send({ type: 'START_GAME', ...startPayload });
+        // 1. Process locally
+        send({ type: 'START_GAME', ...startPayload });
 
-      // Broadcast so the guest machine transitions identically
-      const message = createGameMessage('START_GAME', startPayload);
-      props.connections.forEach((conn) => conn.send(JSON.stringify(message)));
+        // 2. Broadcast so the guest machine transitions identically
+        const message = createGameMessage('START_GAME', startPayload);
+        props.connections.forEach((conn) => {
+          console.log('[ApexNebula] Broadcasting START_GAME to connection');
+          conn.send(JSON.stringify(message));
+        });
+
+        // 3. Record to ledger (CRITICAL for late joiners)
+        props.onAddLedger({ type: 'START_GAME', payload: startPayload });
+      }, 800);
+    }
+  },
+  { immediate: true }
+);
+
+ 
+// Sync local player public key to machine if it resolves after initialization
+watch(
+  resolvedLocalPublicKey,
+  (newKey) => {
+    if (newKey) {
+      console.log('[ApexNebula] Syncing local player public key to machine:', newKey);
+      send({ type: 'SET_LOCAL_PLAYER', publicKey: newKey });
     }
   },
   { immediate: true }
@@ -142,12 +257,43 @@ watch(
 // Replicated event dispatch — process locally AND broadcast to peers.
 // No host/guest distinction: every peer runs the same machine logic.
 const handleAction = (actionType: string, payload: any) => {
-  // Ownership gate: if the action carries a playerId, it must match localPlayerId.
-  // Events without playerId (NEXT_PHASE, INITIATE_MUTATION, etc.) pass through.
-  const lpId = state.value.context.localPlayerId;
-  if (payload?.playerId && payload.playerId !== lpId) {
-    console.warn(`[handleAction] Blocked ${actionType}: payload.playerId=${payload.playerId} !== localPlayerId=${lpId}`);
+  // Ownership gate: if the action carries a playerPublicKey, it must match localPublicKey.
+  // Events without playerPublicKey (NEXT_PHASE, INITIATE_MUTATION, etc.) pass through.
+  const lpKey = state.value.context.localPublicKey || resolvedLocalPublicKey.value;
+  if (payload?.playerPublicKey && lpKey && payload.playerPublicKey !== lpKey) {
+    console.warn(`[handleAction] Blocked ${actionType}: payload.playerPublicKey=${payload.playerPublicKey} !== localPublicKey=${lpKey}`);
     return;
+  }
+
+  // If confirming phase, batch up any pending cube distributions first
+  if (actionType === 'CONFIRM_PHASE' && payload.playerPublicKey === lpKey) {
+    if (pendingGenome.value && localGenome.value) {
+      const distributions = [];
+      const attrs = ['NAV', 'LOG', 'DEF', 'SCN'] as const;
+      
+      for (const attr of attrs) {
+        const delta = (pendingGenome.value.baseAttributes[attr] || 0) - (localGenome.value.baseAttributes[attr] || 0);
+        if (delta !== 0) {
+          distributions.push({ attribute: attr, amount: delta });
+        }
+      }
+
+      if (distributions.length > 0) {
+        const distributePayload = { playerPublicKey: lpKey, distributions };
+        
+        // Process batch locally
+        send({ type: 'DISTRIBUTE_CUBES', ...distributePayload });
+
+        // Broadcast to peers
+        const msg = createGameMessage('DISTRIBUTE_CUBES', distributePayload);
+        props.connections.forEach((conn) => conn.send(JSON.stringify(msg)));
+
+        // Record to ledger (host only)
+        if (props.isInitiator) {
+          props.onAddLedger({ type: 'DISTRIBUTE_CUBES', payload: distributePayload });
+        }
+      }
+    }
   }
 
   // 1. Process locally
@@ -163,34 +309,57 @@ const handleAction = (actionType: string, payload: any) => {
   }
 };
 
+
 const handleFinishTurn = () => {
   if (!localPlayer.value) return;
-  handleAction('FINISH_TURN', { playerId: localPlayer.value.id });
+  handleAction('FINISH_TURN', { playerPublicKey: localPlayer.value.publicKey });
 };
 
 const winnerNames = computed(() => {
   if (!state.value.matches('won')) return [];
   return state.value.context.winners
-    .map((id: string) => state.value.context.players.find((p: Player) => p.id === id)?.name)
+    .map((publicKey: string) => state.value.context.players.find((p: Player) => p.publicKey === publicKey)?.name)
     .filter(Boolean);
 });
 
 const hexGridEntries = computed(() => {
     return Object.fromEntries(
-        state.value.context.players.map((p: Player) => [p.id, COLORS_HEX[p.color]])
+        state.value.context.players.map((p: Player) => [p.publicKey, COLORS_HEX[p.color]])
     );
 });
 
-const currentLocalHexId = computed(() => state.value.context.pieces.find(p => p.playerId === localPlayer.value?.id)?.hexId);
+const currentLocalHexId = computed(() => state.value.context.pieces.find(p => p.playerPublicKey === localPlayer.value?.publicKey)?.hexId);
 
 const localMaxDistance = computed(() => {
     if (!isLocalPlayerTurn.value) return 0;
     const nav = (localGenome.value?.baseAttributes.NAV || 0) + 
                 (localGenome.value?.mutationModifiers.NAV || 0) + 
                 (localGenome.value?.tempAttributeModifiers.NAV || 0);
-    const movesMade = state.value.context.phenotypeActions[localPlayer.value?.id!]?.movesMade || 0;
+    const movesMade = state.value.context.phenotypeActions[localPlayer.value?.publicKey!]?.movesMade || 0;
     return nav > movesMade ? 1 : 0;
 });
+
+// Local state for pending cube distributions (unconfirmed)
+const pendingGenome = ref<any>(null);
+
+// Reset pending genome when phase changes to setup/optimization or when localGenome becomes available
+watch(
+  () => [state.value.context.gamePhase, localGenome.value] as const,
+  ([phase, genome], [prevPhase] = []) => {
+    // Reset pending genome to current machine state if not already set
+    // This allows us to start from the authoritative state
+    if (!pendingGenome.value && genome) {
+      pendingGenome.value = JSON.parse(JSON.stringify(genome));
+    }
+
+    // Sync on phase transition to ensure we start from the machine's truth
+    if (phase !== prevPhase) {
+      pendingGenome.value = JSON.parse(JSON.stringify(genome));
+    }
+  },
+  { immediate: true }
+);
+
 </script>
 
 <template>
@@ -222,7 +391,7 @@ const localMaxDistance = computed(() => {
         </div>
 
         <div class="flex items-center gap-4">
-          <div v-for="p in otherPlayers" :key="p.id" class="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/5 rounded-full" :title="p.name">
+          <div v-for="p in otherPlayers" :key="p.publicKey" class="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/5 rounded-full" :title="p.name">
             <div class="w-2 h-2 rounded-full bg-purple-500" />
             <span class="text-[8px] font-black text-slate-400 uppercase">{{ p.name }}</span>
           </div>
@@ -263,7 +432,7 @@ const localMaxDistance = computed(() => {
             :hex-grid="state.context.hexGrid"
             :pieces="state.context.pieces"
             :player-colors="hexGridEntries"
-            @hex-click="(hexId) => isLocalPlayerTurn && handleAction('MOVE_PLAYER', { playerId: localPlayer?.id, hexId })"
+            @hex-click="(hexId) => isLocalPlayerTurn && handleAction('MOVE_PLAYER', { playerPublicKey: localPlayer?.publicKey, hexId })"
             :current-hex-id="currentLocalHexId"
             :max-distance="localMaxDistance"
           />
@@ -280,7 +449,7 @@ const localMaxDistance = computed(() => {
             <CommandProtocol
               :state="state"
               :local-player="localPlayer"
-              :local-genome="localGenome"
+              :local-genome="pendingGenome || localGenome"
               :is-initiator="isInitiator"
               :current-player="currentPlayer"
               :is-local-player-turn="isLocalPlayerTurn"
@@ -293,21 +462,29 @@ const localMaxDistance = computed(() => {
             <h4 class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
               <div class="w-1 h-3 bg-indigo-500 rounded-full" />
               Local System
-              <Crown v-if="state.context.priorityPlayerId === localPlayer?.id" class="w-3 h-3 text-yellow-500" />
+              <Crown v-if="state.context.priorityPublicKey === localPlayer?.publicKey" class="w-3 h-3 text-yellow-500" />
             </h4>
             <PlayerConsole
               v-if="localGenome"
-              :genome="localGenome"
-              :editable="state.matches('setupPhase') || localGenome.cubePool > 0 || state.matches('optimizationPhase')"
-              :setup-limit="state.matches('setupPhase') ? 6 : undefined"
+              :genome="pendingGenome || localGenome"
+              :editable="(isSetup || isOptimization) && !confirmedLocal"
+              :setup-limit="isSetup ? 10 : undefined"
               @distribute="(attr, amt) => {
-                if (amt < 0 && state.matches('optimizationPhase')) {
-                  handleAction('PRUNE_ATTRIBUTE', { playerId: localPlayer?.id, attribute: attr });
-                } else {
-                  handleAction('DISTRIBUTE_CUBES', { playerId: localPlayer?.id, attribute: attr, amount: amt });
+                if (amt < 0 && isOptimization) {
+                  handleAction('PRUNE_ATTRIBUTE', { playerPublicKey: localPlayer?.publicKey, attribute: attr });
+                } else if (pendingGenome) {
+                  // Only update locally, don't trigger network action
+                  const currentPool = pendingGenome.cubePool;
+                  if (amt > 0 && currentPool < amt) return;
+                  
+                  pendingGenome.baseAttributes[attr] = (pendingGenome.baseAttributes[attr] || 0) + amt;
+                  pendingGenome.cubePool -= amt;
                 }
               }"
             />
+
+
+
           </div>
         </div>
       </div>
@@ -319,17 +496,17 @@ const localMaxDistance = computed(() => {
           External Sectors
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          <template v-for="genome in state.context.genomes" :key="genome.playerId">
-            <div v-if="genome.playerId !== localPlayer?.id" class="space-y-4">
+          <template v-for="genome in state.context.genomes" :key="genome.playerPublicKey">
+            <div v-if="genome.playerPublicKey !== localPlayer?.publicKey" class="space-y-4">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <div class="text-[10px] font-bold text-slate-500 uppercase">{{ state.context.players.find(p => p.id === genome.playerId)?.name }}</div>
-                  <Crown v-if="state.context.priorityPlayerId === genome.playerId" class="w-3 h-3 text-yellow-500" />
+                  <div class="text-[10px] font-bold text-slate-500 uppercase">{{ state.context.players.find(p => p.publicKey === genome.playerPublicKey)?.name }}</div>
+                  <Crown v-if="state.context.priorityPublicKey === genome.playerPublicKey" class="w-3 h-3 text-yellow-500" />
                 </div>
-                <div v-if="state.matches('setupPhase')" class="px-2 py-0.5 border rounded text-[8px] font-black uppercase" :class="state.context.confirmedPlayers.includes(genome.playerId) ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-slate-800 border-white/5 text-slate-500'">
-                  {{ state.context.confirmedPlayers.includes(genome.playerId) ? 'Ready' : 'Configuring' }}
+                <div v-if="state.matches('setupPhase')" class="px-2 py-0.5 border rounded text-[8px] font-black uppercase" :class="state.context.confirmedPlayers.includes(genome.playerPublicKey) ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-slate-800 border-white/5 text-slate-500'">
+                  {{ state.context.confirmedPlayers.includes(genome.playerPublicKey) ? 'Ready' : 'Configuring' }}
                 </div>
-                <div v-else-if="state.matches('phenotypePhase') ? state.context.turnOrder.indexOf(genome.playerId) < state.context.currentPlayerIndex : genome.cubePool === 0" class="px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded text-[8px] font-black text-green-400 uppercase">
+                <div v-else-if="state.matches('phenotypePhase') ? state.context.turnOrder.indexOf(genome.playerPublicKey) < state.context.currentPlayerIndex : genome.cubePool === 0" class="px-2 py-0.5 bg-green-500/10 border border-green-500/30 rounded text-[8px] font-black text-green-400 uppercase">
                   Ready
                 </div>
               </div>
