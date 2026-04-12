@@ -183,7 +183,7 @@ const gridWithData = computed(() => {
         <!-- Piece Indicator -->
         <g
           v-for="(p, pIdx) in hex.hexPieces"
-          :key="`${p.playerId}-${pIdx}`"
+          :key="`${p.playerPublicKey}-${pIdx}`"
           class="animate-in zoom-in-50 fade-in duration-500"
         >
           <circle
@@ -191,11 +191,11 @@ const gridWithData = computed(() => {
             :cy="hex.posY"
             :r="hex.isSingularity ? '35' : '28'"
             fill="none"
-            :stroke="playerColors[p.playerId]"
+            :stroke="playerColors[p.playerPublicKey]"
             stroke-width="4"
             class="opacity-20 animate-pulse"
           />
-          <circle :cx="hex.posX" :cy="hex.posY" r="18" :fill="playerColors[p.playerId]" class="shadow-xl" />
+          <circle :cx="hex.posX" :cy="hex.posY" r="18" :fill="playerColors[p.playerPublicKey]" class="shadow-xl" />
           <circle :cx="hex.posX" :cy="hex.posY" r="12" fill="white" class="opacity-20" />
         </g>
       </g>

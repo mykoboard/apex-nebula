@@ -12,7 +12,7 @@ export type HexType =
     | 'Singularity'; // Core
 
 export interface PlayerPiece {
-    playerId: string;
+    playerPublicKey: string;
     hexId: string;
 }
 
@@ -31,7 +31,7 @@ export interface HexCell {
 }
 
 export interface PlayerGenome {
-    playerId: string;
+    playerPublicKey: string;
     stability: number;
     dataClusters: number;
     rawMatter: number;
@@ -81,14 +81,13 @@ export interface EventEffect {
 }
 
 export interface Player {
-    id: string;
+    publicKey: string;
     name: string;
-    publicKey?: string;
     color: Color;
 }
 
 export interface ApexNebulaContext {
-    localPlayerId: string;
+    localPublicKey: string;
     players: Player[];
     currentPlayerIndex: number;
     genomes: PlayerGenome[];
@@ -101,16 +100,16 @@ export interface ApexNebulaContext {
     isInitiator: boolean;
     seed?: number;
     mutationResults: Record<string, { attr: AttributeType; magnitude: number; attrRoll: number; magRoll: number }>;
-    priorityPlayerId: string;
-    turnOrder: string[];
+    priorityPublicKey: string;
+    turnOrder: string[]; // List of public keys
     dataSpentThisRound: Record<string, number>;
     ledger?: LedgerEntry[];
-    winners: string[];
+    winners: string[]; // List of public keys
     lastMutationRoll: number | null;
     lastHarvestSuccess: boolean | null;
-    lastHarvestResults: { playerId: string; success: boolean; attribute: string; roll: number; magnitude: number }[];
+    lastHarvestResults: { playerPublicKey: string; success: boolean; attribute: string; roll: number; magnitude: number }[];
     phenotypeActions: Record<string, { movesMade: number; harvestDone: boolean }>;
-    confirmedPlayers: string[];
+    confirmedPlayers: string[]; // List of public keys
     lastEventResults?: Record<string, { roll: number; modifier: number; success: boolean }>;
 }
 
@@ -120,16 +119,22 @@ export interface ApexNebulaContext {
 //
 // Usage:
 //   import type { MovePlayerEvent, EventPayload } from '@/types';
-//   const payload: EventPayload<'MOVE_PLAYER'> = { playerId, hexId };
+//   const payload: EventPayload<'MOVE_PLAYER'> = { playerPublicKey, hexId };
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
+
+/** Sets the local player public key (used if resolved after initialization). */
+export interface SetLocalPlayerEvent {
+    type: 'SET_LOCAL_PLAYER';
+    publicKey: string;
+}
 
 /** Initializes the game — creates genomes, places pieces, sets seed. */
 export interface StartGameEvent {
     type: 'START_GAME';
     /** PRNG seed for deterministic replay across peers. */
     seed?: number;
-    /** Ordered list of players; index determines home nebula slot. */
+    /** Ordered list of players. */
     players: Player[];
 }
 
@@ -143,18 +148,18 @@ export interface ResetEvent {
 /** Distributes cubes from the pool to a genome attribute during setup. */
 export interface DistributeCubesEvent {
     type: 'DISTRIBUTE_CUBES';
-    playerId: string;
-    attribute: AttributeType;
-    /** Number of cubes to move from pool → attribute. */
-    amount: number;
+    playerPublicKey: string;
+    /** Batch of distributions to apply at once. */
+    distributions: { attribute: AttributeType; amount: number }[];
 }
+
 
 // ── Shared / Multi-Phase ────────────────────────────────────────────────────
 
 /** Player confirms they are done with the current phase. Idempotent. */
 export interface ConfirmPhaseEvent {
     type: 'CONFIRM_PHASE';
-    playerId: string;
+    playerPublicKey: string;
 }
 
 /** Advances to the next phase. Used in environmental → competitive → optimization. */
@@ -174,7 +179,7 @@ export interface InitiateMutationEvent {
 /** Moves the active player's piece to an adjacent hex and triggers harvest. */
 export interface MovePlayerEvent {
     type: 'MOVE_PLAYER';
-    playerId: string;
+    playerPublicKey: string;
     /** Target hex ID (must be adjacent, distance=1). */
     hexId: string;
 }
@@ -182,13 +187,13 @@ export interface MovePlayerEvent {
 /** Ends the active player's phenotype turn. */
 export interface FinishTurnEvent {
     type: 'FINISH_TURN';
-    playerId: string;
+    playerPublicKey: string;
 }
 
 /** Spends insight tokens for a re-roll or bonus. */
 export interface SpendInsightEvent {
     type: 'SPEND_INSIGHT';
-    playerId: string;
+    playerPublicKey: string;
     amount: number;
 }
 
@@ -206,8 +211,8 @@ export interface ForceEventEvent {
 /** One player hustles another — attribute contest resolved by dice. */
 export interface HustleEvent {
     type: 'HUSTLE';
-    attackerId: string;
-    defenderId: string;
+    attackerPublicKey: string;
+    defenderPublicKey: string;
     /** Attribute category used for the contest. */
     category: string;
 }
@@ -217,14 +222,14 @@ export interface HustleEvent {
 /** Removes 1 point from an attribute, gaining 2 raw matter. */
 export interface PruneAttributeEvent {
     type: 'PRUNE_ATTRIBUTE';
-    playerId: string;
+    playerPublicKey: string;
     attribute: AttributeType;
 }
 
 /** Spends 3 data clusters to gain 1 cube back into the pool. */
 export interface OptimizeDataEvent {
     type: 'OPTIMIZE_DATA';
-    playerId: string;
+    playerPublicKey: string;
 }
 
 // ── Composite Union ─────────────────────────────────────────────────────────
@@ -242,7 +247,8 @@ export type ApexNebulaEvent =
     | ForceEventEvent
     | HustleEvent
     | PruneAttributeEvent
-    | OptimizeDataEvent;
+    | OptimizeDataEvent
+    | SetLocalPlayerEvent;
 
 /** Extracts the payload fields (everything except `type`) for a given event type string. */
 export type EventPayload<T extends ApexNebulaEvent['type']> = Omit<

@@ -60,3 +60,15 @@ export const calculateMaintenanceCost = (genome: PlayerGenome): number => {
     const totalStats = Object.values(genome.baseAttributes).reduce((a, b) => a + b, 0);
     return 1 + Math.max(0, Math.floor((totalStats - 12) / 2));
 };
+
+// Helper: Get deterministic numeric offset from string (e.g. public key) for PRNG seeding
+export const getDeterministicOffset = (id: string): number => {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        const char = id.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+};
+

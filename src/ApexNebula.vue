@@ -78,13 +78,14 @@ const state = snapshot;
 const localPlayer = computed<Player | null>(() => {
   // Primary: machine's authoritative context
   const mcKey = state.value.context.localPublicKey;
+  const propKey = resolvedLocalPublicKey.value;
+  
   if (mcKey) {
     const p = state.value.context.players.find((p: Player) => p.publicKey === mcKey);
     if (p) return p;
   }
   
   // Secondary: resolved from props if machine hasn't synced yet
-  const propKey = resolvedLocalPublicKey.value;
   if (propKey) {
     const p = state.value.context.players.find((p: Player) => p.publicKey === propKey);
     if (p) return p;
@@ -112,13 +113,11 @@ const otherPlayers = computed(() => state.value.context.players.filter((p: Playe
 const handleMessage = (data: any) => {
   try {
     const rawMessage = typeof data === 'string' ? JSON.parse(data) : data;
-    console.log('[ApexNebula] Processing message:', rawMessage.type, rawMessage);
     
     // Broaden filters to catch system-level game messages
     const isValid = isGameMessage(rawMessage) || rawMessage.namespace === 'game' || rawMessage.namespace === 'apex-nebula';
 
     if (isValid) {
-      console.log(`[ApexNebula] Dispatched: ${rawMessage.type}`);
       send({ type: rawMessage.type as any, ...rawMessage.payload });
 
       // Host specific handlers
@@ -159,9 +158,7 @@ const broadcastCurrentState = () => {
 watch(
   () => props.connections,
   (conns, _, onCleanup) => {
-    console.log(`[ApexNebula] Connections watch triggered. Count: ${conns.length}`);
     conns.forEach((conn) => {
-      console.log(`[ApexNebula] Attaching listener to connection: ${conn.id || 'unknown'}`);
       conn.addMessageListener(handleMessage);
     });
 
@@ -193,11 +190,17 @@ watch(
   (ledger) => {
     console.log(`[ApexNebula] Ledger watch triggered. Total items: ${ledger.length}. Processed so far: ${processedLedgerCount.value}`);
     if (!props.isInitiator && isWaiting.value && ledger && ledger.length > processedLedgerCount.value) {
-      const newActions = ledger.slice(processedLedgerCount.value);
-      console.log(`[ApexNebula] REPLAYING LEDGER: Found ${newActions.length} new actions to apply.`);
-      newActions.forEach((action: any) => {
-        console.log(`[ApexNebula] Replaying: ${action.type}`);
-        send({ type: action.type as any, ...action.payload });
+      const newBlocks = ledger.slice(processedLedgerCount.value);
+      console.log(`[ApexNebula] REPLAYING LEDGER: Found ${newBlocks.length} new blocks to apply.`);
+      
+      newBlocks.forEach((block: any) => {
+        const action = block.action;
+        if (action && action.type) {
+          console.log(`[ApexNebula] Replaying Action: ${action.type}`, action.payload);
+          send({ type: action.type as any, ...action.payload });
+        } else {
+          console.warn('[ApexNebula] Skipping invalid ledger block (missing action):', block);
+        }
       });
       processedLedgerCount.value = ledger.length;
     }
@@ -390,12 +393,7 @@ watch(
           </div>
         </div>
 
-        <div class="flex items-center gap-4">
-          <div v-for="p in otherPlayers" :key="p.publicKey" class="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/5 rounded-full" :title="p.name">
-            <div class="w-2 h-2 rounded-full bg-purple-500" />
-            <span class="text-[8px] font-black text-slate-400 uppercase">{{ p.name }}</span>
-          </div>
-        </div>
+
       </div>
 
       <div class="relative z-10">

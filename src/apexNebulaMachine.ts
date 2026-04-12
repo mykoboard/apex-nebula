@@ -7,7 +7,7 @@ import {
 } from './types';
 import { createHexGrid } from './gridUtils';
 import { INITIAL_EVENT_DECK } from './eventUtils';
-import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded, calculateMaintenanceCost } from './utils';
+import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded, calculateMaintenanceCost, getDeterministicOffset } from './utils';
 
 const EMPTY_MODS = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
 
@@ -20,7 +20,7 @@ export const apexNebulaMachine = createMachine({
     id: 'apexNebula',
     initial: 'waitingForPlayers',
     context: ({ input }: { input: any }) => ({
-        localPlayerId: input?.localPlayerId ?? '',
+        localPublicKey: input?.localPublicKey ?? '',
         players: input?.players ?? [],
         currentPlayerIndex: 0,
         genomes: input?.genomes ?? [],
@@ -33,7 +33,7 @@ export const apexNebulaMachine = createMachine({
         isInitiator: input?.isInitiator ?? false,
         seed: input?.seed,
         mutationResults: {},
-        priorityPlayerId: '',
+        priorityPublicKey: '',
         turnOrder: [],
         dataSpentThisRound: {},
         winners: [],
@@ -53,31 +53,41 @@ export const apexNebulaMachine = createMachine({
             on: {
                 START_GAME: {
                     target: 'setupPhase',
-                    actions: assign({
-                        seed: ({ event }) => event.type === 'START_GAME' ? event.seed : undefined,
-                        hexGrid: ({ event }) => event.type === 'START_GAME' ? createHexGrid(event.seed || 12345) : [],
-                        players: ({ event }) => event.type === 'START_GAME' ? event.players : [],
-                        genomes: ({ event }) => event.type === 'START_GAME' ? event.players.map(p => ({
-                            playerId: p.id,
-                            stability: 3,
-                            dataClusters: 0,
-                            rawMatter: 0,
-                            insightTokens: 0,
-                            lockedSlots: [],
-                            baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
-                            mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
-                            tempAttributeModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
-                            cubePool: 8,
-                        })) : [],
-                        pieces: ({ event }) => event.type === 'START_GAME' ? event.players.map((p, i) => {
-                            const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
+                    actions: [
+                        assign(({ event }) => {
+                            if (event.type !== 'START_GAME' || !event.players) return {};
+
+                            const sortedPlayers = [...event.players].sort((a, b) =>
+                                (a.publicKey || '').localeCompare(b.publicKey || '')
+                            );
+
                             return {
-                                playerId: p.id,
-                                hexId: starts[i % starts.length],
+                                seed: event.seed,
+                                hexGrid: createHexGrid(event.seed || 12345),
+                                players: sortedPlayers,
+                                genomes: sortedPlayers.map(p => ({
+                                    playerPublicKey: p.publicKey,
+                                    stability: 3,
+                                    dataClusters: 0,
+                                    rawMatter: 0,
+                                    insightTokens: 0,
+                                    lockedSlots: [],
+                                    baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
+                                    mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
+                                    tempAttributeModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
+                                    cubePool: 8,
+                                })),
+                                pieces: sortedPlayers.map((p, i) => {
+                                    const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
+                                    return {
+                                        playerPublicKey: p.publicKey,
+                                        hexId: starts[i % starts.length],
+                                    };
+                                }),
+                                turnOrder: sortedPlayers.map(p => p.publicKey),
                             };
-                        }) : [],
-                        turnOrder: ({ event }) => event.type === 'START_GAME' ? event.players.map(p => p.id) : [],
-                    }),
+                        }),
+                    ],
                 },
             },
         },
@@ -226,6 +236,11 @@ export const apexNebulaMachine = createMachine({
             target: '.environmentalPhase',
             actions: 'forceEnvironmentalEvent',
         },
+        SET_LOCAL_PLAYER: {
+            actions: assign({
+                localPublicKey: ({ event }) => event.type === 'SET_LOCAL_PLAYER' ? event.publicKey : ''
+            })
+        },
     },
 }, {
     actions: {
@@ -233,35 +248,35 @@ export const apexNebulaMachine = createMachine({
         calculateInitialPriority: assign(({ context }) => {
             const prng = createPRNG(context.seed || 12345);
             const scores = context.players.map(p => {
-                const genome = context.genomes.find(g => g.playerId === p.id)!;
+                const genome = context.genomes.find(g => g.playerPublicKey === p.publicKey)!;
                 const baseScore = genome.baseAttributes.NAV + genome.baseAttributes.SCN;
                 const tie1 = genome.baseAttributes.LOG;
                 const tie2 = rollSeededDice(prng, 6);
-                return { playerId: p.id, score: baseScore * 10000 + tie1 * 100 + tie2 };
+                return { playerPublicKey: p.publicKey, score: baseScore * 10000 + tie1 * 100 + tie2 };
             });
 
             const sorted = [...scores].sort((a, b) => b.score - a.score);
-            const turnOrder = sorted.map(s => s.playerId);
+            const turnOrder = sorted.map(s => s.playerPublicKey);
             return {
                 turnOrder,
-                priorityPlayerId: turnOrder[0],
+                priorityPublicKey: turnOrder[0],
                 currentPlayerIndex: 0
             };
         }),
 
         updateRoundPriority: assign(({ context }) => {
             const scores = context.players.map(p => {
-                const spent = context.dataSpentThisRound[p.id] || 0;
-                return { playerId: p.id, spent };
+                const spent = context.dataSpentThisRound[p.publicKey] || 0;
+                return { playerPublicKey: p.publicKey, spent };
             });
 
             // If tied, keep relative order but prioritize high spenders
             // For now simple: highest spender gets token.
             const sorted = [...scores].sort((a, b) => b.spent - a.spent);
-            const winnerId = sorted[0].playerId;
+            const winnerPublicKey = sorted[0].playerPublicKey;
 
             // Shift turnOrder so winner comes first
-            const oldIdx = context.turnOrder.indexOf(winnerId);
+            const oldIdx = context.turnOrder.indexOf(winnerPublicKey);
             const newTurnOrder = [
                 ...context.turnOrder.slice(oldIdx),
                 ...context.turnOrder.slice(0, oldIdx)
@@ -269,7 +284,7 @@ export const apexNebulaMachine = createMachine({
 
             return {
                 turnOrder: newTurnOrder,
-                priorityPlayerId: winnerId,
+                priorityPublicKey: winnerPublicKey,
                 currentPlayerIndex: 0,
                 dataSpentThisRound: {} // Reset for next round
             };
@@ -279,9 +294,12 @@ export const apexNebulaMachine = createMachine({
             const attributeMap: AttributeType[] = ['NAV', 'LOG', 'DEF', 'SCN'];
             const newResults: Record<string, any> = {};
 
-            const newGenomes = context.genomes.map((g, index) => {
-                // Ensure determinism by including the player's intrinsic index along with round & seed
-                const seed = (context.seed ?? 12345) + context.round + index;
+            const newGenomes = context.genomes.map((g) => {
+                const player = context.players.find(p => p.publicKey === g.playerPublicKey);
+                const playerName = player?.name || 'Unknown';
+                
+                // Use deterministic offset from public key instead of array index.
+                const seed = (context.seed ?? 12345) + context.round + getDeterministicOffset(g.playerPublicKey);
                 const prng = createPRNG(seed);
 
                 const attrRoll = rollSeededDice(prng, 4);
@@ -289,7 +307,12 @@ export const apexNebulaMachine = createMachine({
                 const magRoll = rollSeededDice(prng, 6);
                 const magnitude = magRoll <= 2 ? -1 : (magRoll >= 5 ? 1 : 0);
 
-                newResults[g.playerId] = { attr, magnitude, attrRoll, magRoll };
+                newResults[g.playerPublicKey] = { 
+                    attr, 
+                    magnitude, 
+                    attrRoll, 
+                    magRoll 
+                };
 
                 return {
                     ...g,
@@ -300,15 +323,13 @@ export const apexNebulaMachine = createMachine({
                 };
             });
 
-            console.log(`Applied mutations for all players:`, newResults);
-
             return { genomes: newGenomes, mutationResults: newResults };
         }),
 
         spendInsightForReroll: assign(({ context, event }) => {
             if (event.type !== 'SPEND_INSIGHT') return {};
-            const { playerId, amount } = event;
-            const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
+            const { playerPublicKey, amount } = event;
+            const genomeIndex = context.genomes.findIndex(g => g.playerPublicKey === playerPublicKey);
             if (genomeIndex === -1) return {};
             const genome = context.genomes[genomeIndex];
             if (genome.insightTokens < amount) return {};
@@ -321,40 +342,48 @@ export const apexNebulaMachine = createMachine({
 
         distributeCubes: assign(({ context, event }) => {
             if (event.type !== 'DISTRIBUTE_CUBES') return {};
-            const { playerId, attribute, amount } = event;
-            const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
+            const { playerPublicKey, distributions } = event;
+            const genomeIndex = context.genomes.findIndex(g => g.playerPublicKey === playerPublicKey);
             if (genomeIndex === -1) return {};
             const genome = context.genomes[genomeIndex];
 
-            // If attribute is missing, it's an obfuscated update (just decrement pool)
-            if (!attribute) {
-                if (genome.cubePool - amount < 0 && amount > 0) return {};
-                const newGenomes = context.genomes.map((g, idx) =>
-                    idx === genomeIndex ? { ...g, cubePool: g.cubePool - amount } : g
-                );
-                return { genomes: newGenomes };
+            let newBaseAttributes = { ...genome.baseAttributes };
+            let newCubePool = genome.cubePool;
+
+            for (const dist of distributions) {
+                const { attribute, amount } = dist;
+
+                // If attribute is missing, it's an obfuscated update (just decrement pool)
+                if (!attribute) {
+                    if (newCubePool - amount >= 0 || amount < 0) {
+                        newCubePool -= amount;
+                    }
+                    continue;
+                }
+
+                const currentCubes = newBaseAttributes[attribute];
+                const newCubes = currentCubes + amount;
+
+                // Validation guards
+                if (newCubes < 1 || newCubes > 10) continue;
+                if (context.gamePhase === 'setup' && newCubes > 6) continue;
+                if (context.gamePhase === 'optimization' && amount < 0) continue; // No reductions in Optimization except pruning
+                if (newCubePool - amount < 0 && amount > 0) continue;
+
+                newBaseAttributes[attribute] = newCubes;
+                newCubePool -= amount;
             }
-
-            const currentCubes = genome.baseAttributes[attribute];
-            const newCubes = currentCubes + amount;
-
-            if (newCubes < 1 || newCubes > 10) return {};
-            if (context.gamePhase === 'setup' && newCubes > 6) return {};
-            if (context.gamePhase === 'optimization' && amount < 0 && attribute) return {}; // No reductions in Optimization except pruning (which passes undefined attribute)
-            if (genome.cubePool - amount < 0 && amount > 0) return {};
 
             const newGenomes = context.genomes.map((g, idx) =>
                 idx === genomeIndex ? {
                     ...g,
-                    baseAttributes: {
-                        ...g.baseAttributes,
-                        [attribute]: newCubes
-                    },
-                    cubePool: g.cubePool - amount
+                    baseAttributes: newBaseAttributes,
+                    cubePool: newCubePool
                 } : g
             );
             return { genomes: newGenomes };
         }),
+
 
 
         nextPhenotypePlayer: assign(({ context }) => ({
@@ -363,10 +392,10 @@ export const apexNebulaMachine = createMachine({
 
         moveAndHarvest: assign(({ context, event }) => {
             if (event.type !== 'MOVE_PLAYER') return {};
-            const { playerId, hexId } = event;
-            console.log(`Action: moveAndHarvest for ${playerId} to ${hexId}`);
+            const { playerPublicKey, hexId } = event;
+            console.log(`Action: moveAndHarvest for ${playerPublicKey} to ${hexId}`);
 
-            const pieceIndex = context.pieces.findIndex(p => p.playerId === playerId);
+            const pieceIndex = context.pieces.findIndex(p => p.playerPublicKey === playerPublicKey);
             if (pieceIndex === -1) return {};
 
             const targetHex = context.hexGrid.find(h => h.id === hexId);
@@ -378,12 +407,12 @@ export const apexNebulaMachine = createMachine({
             );
 
             // 2. Automated Harvest Logic
-            const genomeIndex = context.genomes.findIndex(g => g.playerId === playerId);
+            const genomeIndex = context.genomes.findIndex(g => g.playerPublicKey === playerPublicKey);
             const genome = context.genomes[genomeIndex];
-            const results: { playerId: string; success: boolean; attribute: string; roll: number; magnitude: number }[] = [];
+            const results: { playerPublicKey: string; success: boolean; attribute: string; roll: number; magnitude: number }[] = [];
 
             // Seeded PRNG for deterministic harvest
-            const seed = (context.seed || 12345) + context.round + context.currentPlayerIndex + (context.phenotypeActions[playerId]?.movesMade || 0);
+            const seed = (context.seed || 12345) + context.round + getDeterministicOffset(playerPublicKey) + (context.phenotypeActions[playerPublicKey]?.movesMade || 0);
             const prng = createPRNG(seed);
 
             const attrsToCheck = Array.isArray(targetHex.targetAttribute) ? targetHex.targetAttribute : [targetHex.targetAttribute];
@@ -400,7 +429,7 @@ export const apexNebulaMachine = createMachine({
                 const attrValue = (genome.baseAttributes[attr] || 0) + (genome.mutationModifiers[attr] || 0);
                 const success = (attrValue + magnitude) >= targetHex.threshold;
 
-                results.push({ playerId, success, attribute: attr, roll, magnitude });
+                results.push({ playerPublicKey, success, attribute: attr, roll, magnitude });
 
                 if (!success) {
                     anyFailure = true;
@@ -419,7 +448,7 @@ export const apexNebulaMachine = createMachine({
             }
 
             const newGenomes = context.genomes.map((g) => {
-                if (g.playerId !== playerId) return g;
+                if (g.playerPublicKey !== playerPublicKey) return g;
 
                 const passedSingularity = targetHex.type === 'Singularity' && !anyFailure;
 
@@ -434,7 +463,7 @@ export const apexNebulaMachine = createMachine({
                     hasPassedSingularity: g.hasPassedSingularity || passedSingularity
                 };
             });
-            const currentActions = context.phenotypeActions[playerId] || { movesMade: 0, harvestDone: false };
+            const currentActions = context.phenotypeActions[playerPublicKey] || { movesMade: 0, harvestDone: false };
 
             // Re-calculate NAV for the player to exhaust points if Singularity passed
             const nav = (genome.baseAttributes['NAV'] || 0) + (genome.mutationModifiers['NAV'] || 0);
@@ -442,7 +471,7 @@ export const apexNebulaMachine = createMachine({
 
             const newPhenotypeActions = {
                 ...context.phenotypeActions,
-                [playerId]: {
+                [playerPublicKey]: {
                     ...currentActions,
                     movesMade: targetHex.type === 'Singularity' && !anyFailure ? Math.max(nav, currentActions.movesMade + navCost) : currentActions.movesMade + navCost,
                     harvestDone: true
@@ -452,9 +481,9 @@ export const apexNebulaMachine = createMachine({
             return {
                 pieces: newPieces,
                 genomes: newGenomes.map(g => {
-                    if (g.playerId === playerId && g.stability <= 0) {
-                        console.log(`STABILITY CRITICAL for ${playerId}. Triggering Hard Reboot.`);
-                        const playerIdx = context.players.findIndex(p => p.id === playerId);
+                    if (g.playerPublicKey === playerPublicKey && g.stability <= 0) {
+                        console.log(`STABILITY CRITICAL for ${playerPublicKey}. Triggering Hard Reboot.`);
+                        const playerIdx = context.players.findIndex(p => p.publicKey === playerPublicKey);
                         const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
                         const startHex = starts[playerIdx % starts.length];
 
@@ -527,42 +556,42 @@ export const apexNebulaMachine = createMachine({
             const getPlayersByTarget = (target?: string): string[] => {
                 console.log('Finding targets for:', target);
                 if (!target || target === 'self') {
-                    const all = context.players.map(p => p.id);
+                    const all = context.players.map(p => p.publicKey);
                     console.log('Target self -> all players:', all);
                     return all;
                 }
-                if (target === 'all') return context.players.map(p => p.id);
-                if (target === 'priority') return [context.priorityPlayerId];
+                if (target === 'all') return context.players.map(p => p.publicKey);
+                if (target === 'priority') return [context.priorityPublicKey];
                 if (target === 'lowest_sum') {
                     const sorted = [...newGenomes].sort((a, b) => calculateFitness(a, 'TOTAL_SUM') - calculateFitness(b, 'TOTAL_SUM'));
-                    const low = sorted.length > 0 ? [sorted[0].playerId] : [];
+                    const low = sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
                     console.log('Target lowest_sum ->', low);
                     return low;
                 }
                 if (target === 'highest_sum') {
                     const sorted = [...newGenomes].sort((a, b) => calculateFitness(b, 'TOTAL_SUM') - calculateFitness(a, 'TOTAL_SUM'));
-                    const high = sorted.length > 0 ? [sorted[0].playerId] : [];
+                    const high = sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
                     console.log('Target highest_sum ->', high);
                     return high;
                 }
                 if (target === 'most_data') {
                     const sorted = [...newGenomes].sort((a, b) => b.dataClusters - a.dataClusters);
-                    return sorted.length > 0 ? [sorted[0].playerId] : [];
+                    return sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
                 }
                 if (target === 'most_matter') {
                     const sorted = [...newGenomes].sort((a, b) => b.rawMatter - a.rawMatter);
-                    return sorted.length > 0 ? [sorted[0].playerId] : [];
+                    return sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
                 }
                 if (target === 'highest_stat') {
-                    return context.players.map(p => p.id);
+                    return context.players.map(p => p.publicKey);
                 }
                 if (target === 'sum_26_plus') {
-                    const res = newGenomes.filter(g => calculateFitness(g, 'TOTAL_SUM') >= 26).map(g => g.playerId);
+                    const res = newGenomes.filter(g => calculateFitness(g, 'TOTAL_SUM') >= 26).map(g => g.playerPublicKey);
                     console.log('Target sum_26_plus ->', res);
                     return res;
                 }
                 if (target === 'stat_8_plus') {
-                    const res = newGenomes.filter(g => Object.values(g.baseAttributes).some(v => v >= 8)).map(g => g.playerId);
+                    const res = newGenomes.filter(g => Object.values(g.baseAttributes).some(v => v >= 8)).map(g => g.playerPublicKey);
                     console.log('Target stat_8_plus ->', res);
                     return res;
                 }
@@ -609,12 +638,12 @@ export const apexNebulaMachine = createMachine({
                         break;
                     case 'hard_reboot':
                         {
-                            const playerIdx = context.players.findIndex(p => p.id === genome.playerId);
+                            const playerIdx = context.players.findIndex(p => p.publicKey === genome.playerPublicKey);
                             const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
                             const startHex = starts[playerIdx % starts.length];
 
                             // Note: newPieces is already in scope in evaluateEnvironmentalFitness
-                            const pieceIdx = newPieces.findIndex(p => p.playerId === genome.playerId);
+                            const pieceIdx = newPieces.findIndex(p => p.playerPublicKey === genome.playerPublicKey);
                             if (pieceIdx !== -1) {
                                 newPieces[pieceIdx] = { ...newPieces[pieceIdx], hexId: startHex };
                             }
@@ -632,13 +661,13 @@ export const apexNebulaMachine = createMachine({
                 }
                 const result = { ...newGenome };
                 if (result.stability <= 0) {
-                    console.log(`STABILITY CRITICAL (Event) for ${genome.playerId}. Triggering Hard Reboot.`);
-                    const playerIdx = context.players.findIndex(p => p.id === genome.playerId);
+                    console.log(`STABILITY CRITICAL (Event) for ${genome.playerPublicKey}. Triggering Hard Reboot.`);
+                    const playerIdx = context.players.findIndex(p => p.publicKey === genome.playerPublicKey);
                     const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
                     const startHex = starts[playerIdx % starts.length];
 
                     // Find piece in outer scope (newPieces)
-                    const pIdx = newPieces.findIndex(p => p.playerId === genome.playerId);
+                    const pIdx = newPieces.findIndex(p => p.playerPublicKey === genome.playerPublicKey);
                     if (pIdx !== -1) {
                         newPieces[pIdx] = { ...newPieces[pIdx], hexId: startHex };
                     }
@@ -653,7 +682,7 @@ export const apexNebulaMachine = createMachine({
             };
 
             // 3. Helper to apply effects that might affect pieces or multiple players
-            const processComplexEffect = (currentGenomes: any[], currentPieces: any[], effect: any, triggeringPlayerId: string) => {
+            const processComplexEffect = (currentGenomes: any[], currentPieces: any[], effect: any, triggeringPlayerPublicKey: string) => {
                 let genomes = [...currentGenomes];
                 let pieces = [...currentPieces];
 
@@ -663,35 +692,35 @@ export const apexNebulaMachine = createMachine({
                     const resource = effect.details?.resource;
                     const amount = effect.amount || 1;
 
-                    const fromIds = fromTarget === 'highest_sum' ? getPlayersByTarget('highest_sum') : [triggeringPlayerId];
-                    const toIds = toTarget === 'lowest_sum' ? getPlayersByTarget('lowest_sum') : [triggeringPlayerId];
+                    const fromKeys = fromTarget === 'highest_sum' ? getPlayersByTarget('highest_sum') : [triggeringPlayerPublicKey];
+                    const toKeys = toTarget === 'lowest_sum' ? getPlayersByTarget('lowest_sum') : [triggeringPlayerPublicKey];
 
-                    if (fromIds.length > 0 && toIds.length > 0) {
-                        const fromId = fromIds[0];
-                        const toId = toIds[0];
+                    if (fromKeys.length > 0 && toKeys.length > 0) {
+                        const fromKey = fromKeys[0];
+                        const toKey = toKeys[0];
                         genomes = genomes.map(g => {
-                            if (g.playerId === fromId) {
+                            if (g.playerPublicKey === fromKey) {
                                 if (resource === 'data') return { ...g, dataClusters: Math.max(0, g.dataClusters - amount) };
                                 if (resource === 'matter') return { ...g, rawMatter: Math.max(0, g.rawMatter - amount) };
                             }
-                            if (g.playerId === toId) {
+                            if (g.playerPublicKey === toKey) {
                                 if (resource === 'data') return { ...g, dataClusters: g.dataClusters + amount };
                                 if (resource === 'matter') return { ...g, rawMatter: g.rawMatter + amount };
                             }
                             return g;
                         });
-                        console.log(`Transferred ${amount} ${resource} from ${fromId} to ${toId}`);
+                        console.log(`Transferred ${amount} ${resource} from ${fromKey} to ${toKey}`);
                     }
                 } else if (effect.type === 'displacement') {
-                    const targetIds = getPlayersByTarget(effect.target);
+                    const targetKeys = getPlayersByTarget(effect.target);
                     const amount = effect.amount || 1;
                     pieces = pieces.map(p => {
-                        if (targetIds.includes(p.playerId)) {
+                        if (targetKeys.includes(p.playerPublicKey)) {
                             // Find a neighbor or random hex? 
                             // For Ion Storm (Hazard), let's assume random adjacent for now or logical shift
                             // Real displacement logic would push away from a center or something.
                             // Simplified: move to a random adjacent hex if free or just displace.
-                            console.log(`Displacing ${p.playerId} by ${amount} units`);
+                            console.log(`Displacing ${p.playerPublicKey} by ${amount} units`);
                             // For simplicity, we'll just log this as it requires a physics-like push on hex grid
                         }
                         return p;
@@ -711,13 +740,13 @@ export const apexNebulaMachine = createMachine({
             // Handle Global Effects
             if (event.effects.global) {
                 if (['transfer', 'displacement', 'map_shift'].includes(event.effects.global.type)) {
-                    const complex = processComplexEffect(newGenomes, newPieces, event.effects.global, context.priorityPlayerId);
+                    const complex = processComplexEffect(newGenomes, newPieces, event.effects.global, context.priorityPublicKey);
                     newGenomes = complex.genomes;
                     newPieces = complex.pieces;
                 } else {
                     const globalTargets = getPlayersByTarget(event.effects.global.target);
                     newGenomes = newGenomes.map(g => {
-                        if (globalTargets.includes(g.playerId)) {
+                        if (globalTargets.includes(g.playerPublicKey)) {
                             return applyEffect(g, event.effects.global);
                         }
                         return g;
@@ -729,14 +758,14 @@ export const apexNebulaMachine = createMachine({
                     console.log('MAP SHIFT EVENT:', event.effects.global.details?.action);
                     // Implement Core Drift: Move Singularity
                     if (event.effects.global.details?.action === 'move_singularity_toward') {
-                        const targetPlayerIds = getPlayersByTarget(event.effects.global.target);
-                        if (targetPlayerIds.length > 0) {
-                            const targetPiece = newPieces.find(p => p.playerId === targetPlayerIds[0]);
+                        const targetPlayerPublicKeys = getPlayersByTarget(event.effects.global.target);
+                        if (targetPlayerPublicKeys.length > 0) {
+                            const targetPiece = newPieces.find(p => p.playerPublicKey === targetPlayerPublicKeys[0]);
                             const targetHex = newHexGrid.find(h => h.id === targetPiece?.hexId);
                             const singularity = newHexGrid.find(h => h.type === 'Singularity');
                             if (singularity && targetHex) {
                                 // Simplified: move singularity 1 step toward player
-                                console.log(`Moving Singularity toward ${targetPlayerIds[0]}`);
+                                console.log(`Moving Singularity toward ${targetPlayerPublicKeys[0]}`);
                             }
                         }
                     }
@@ -751,34 +780,34 @@ export const apexNebulaMachine = createMachine({
                     const fitness = calculateFitness(genome, checkType) + modifier;
                     const success = fitness >= thresholdValue;
 
-                    eventResults[genome.playerId] = { roll, modifier, success };
-                    console.log(`Player ${genome.playerId}: Roll=${roll}(${modifier}), Fitness=${fitness}, Success=${success}`);
+                    eventResults[genome.playerPublicKey] = { roll, modifier, success };
+                    console.log(`Player ${genome.playerPublicKey}: Roll=${roll}(${modifier}), Fitness=${fitness}, Success=${success}`);
 
                     if (success && event.effects.onSuccess) {
                         if (['transfer', 'displacement'].includes(event.effects.onSuccess.type)) {
-                            const complex = processComplexEffect(newGenomes, newPieces, event.effects.onSuccess, genome.playerId);
+                            const complex = processComplexEffect(newGenomes, newPieces, event.effects.onSuccess, genome.playerPublicKey);
                             // Update newPieces globally, but how to return newGenome for map?
                             // This architecture is slightly flawed for map. 
                             // Let's just update the local genome if it's a simple effect, 
                             // or handle complex ones outside.
                             newPieces = complex.pieces;
-                            return complex.genomes.find(g => g.playerId === genome.playerId) || genome;
+                            return complex.genomes.find(g => g.playerPublicKey === genome.playerPublicKey) || genome;
                         } else {
                             const targets = getPlayersByTarget(event.effects.onSuccess.target);
-                            if (targets.includes(genome.playerId)) {
-                                console.log(`Applying SUCCESS effect to ${genome.playerId}`);
+                            if (targets.includes(genome.playerPublicKey)) {
+                                console.log(`Applying SUCCESS effect to ${genome.playerPublicKey}`);
                                 return applyEffect(genome, event.effects.onSuccess);
                             }
                         }
                     } else if (!success && event.effects.onFailure) {
                         if (['transfer', 'displacement'].includes(event.effects.onFailure.type)) {
-                            const complex = processComplexEffect(newGenomes, newPieces, event.effects.onFailure, genome.playerId);
+                            const complex = processComplexEffect(newGenomes, newPieces, event.effects.onFailure, genome.playerPublicKey);
                             newPieces = complex.pieces;
-                            return complex.genomes.find(g => g.playerId === genome.playerId) || genome;
+                            return complex.genomes.find(g => g.playerPublicKey === genome.playerPublicKey) || genome;
                         } else {
                             const targets = getPlayersByTarget(event.effects.onFailure.target);
-                            if (targets.includes(genome.playerId)) {
-                                console.log(`Applying FAILURE effect to ${genome.playerId}`);
+                            if (targets.includes(genome.playerPublicKey)) {
+                                console.log(`Applying FAILURE effect to ${genome.playerPublicKey}`);
                                 return applyEffect(genome, event.effects.onFailure);
                             }
                         }
@@ -797,19 +826,19 @@ export const apexNebulaMachine = createMachine({
 
         resolveHustle: assign(({ context, event }) => {
             if (event.type !== 'HUSTLE') return {};
-            const { attackerId, defenderId } = event;
-            const attackerGenome = context.genomes.find(g => g.playerId === attackerId);
-            const defenderGenome = context.genomes.find(g => g.playerId === defenderId);
+            const { attackerPublicKey, defenderPublicKey } = event;
+            const attackerGenome = context.genomes.find(g => g.playerPublicKey === attackerPublicKey);
+            const defenderGenome = context.genomes.find(g => g.playerPublicKey === defenderPublicKey);
             if (!attackerGenome || !defenderGenome) return {};
 
             const attackerPower = Object.values(attackerGenome.baseAttributes).reduce((a, b) => a + b, 0);
             const defenderPower = Object.values(defenderGenome.baseAttributes).reduce((a, b) => a + b, 0);
 
             const newGenomes = context.genomes.map(genome => {
-                if (genome.playerId === attackerId && attackerPower > defenderPower) {
+                if (genome.playerPublicKey === attackerPublicKey && attackerPower > defenderPower) {
                     return { ...genome, dataClusters: genome.dataClusters + 1 };
                 }
-                if (genome.playerId === defenderId && defenderPower > attackerPower) {
+                if (genome.playerPublicKey === defenderPublicKey && defenderPower > attackerPower) {
                     return { ...genome, dataClusters: genome.dataClusters + 1 };
                 }
                 return genome;
@@ -819,16 +848,16 @@ export const apexNebulaMachine = createMachine({
 
         confirmPhase: assign(({ context, event }) => {
             if (event.type !== 'CONFIRM_PHASE') return {};
-            console.log('Action: confirmPhase', event.playerId, 'Current confirmed:', context.confirmedPlayers);
-            if (context.confirmedPlayers.includes(event.playerId)) return {};
-            const newConfirmed = [...context.confirmedPlayers, event.playerId];
+            console.log('Action: confirmPhase', event.playerPublicKey, 'Current confirmed:', context.confirmedPlayers);
+            if (context.confirmedPlayers.includes(event.playerPublicKey)) return {};
+            const newConfirmed = [...context.confirmedPlayers, event.playerPublicKey];
             console.log('New confirmed list:', newConfirmed);
 
             // Deduct matter immediately upon confirming (skip if in setup phase, as cost doesn't apply)
-            const playerGenome = context.genomes.find(g => g.playerId === event.playerId);
+            const playerGenome = context.genomes.find(g => g.playerPublicKey === event.playerPublicKey);
             const cost = (playerGenome && context.gamePhase !== 'setup') ? calculateMaintenanceCost(playerGenome) : 0;
             const newGenomes = context.genomes.map(g =>
-                g.playerId === event.playerId
+                g.playerPublicKey === event.playerPublicKey
                     ? { ...g, rawMatter: Math.max(0, g.rawMatter - cost) }
                     : g
             );
@@ -853,19 +882,19 @@ export const apexNebulaMachine = createMachine({
         })),
 
         recordWinner: assign(({ context }) => {
-            const winnerIds = context.genomes.filter(g => checkWinCondition(g)).map(g => g.playerId);
-            return { winners: winnerIds };
+            const winnerPublicKeys = context.genomes.filter(g => checkWinCondition(g)).map(g => g.playerPublicKey);
+            return { winners: winnerPublicKeys };
         }),
 
         optimizeData: assign(({ context, event }) => {
             if (event.type !== 'OPTIMIZE_DATA') return {};
-            const { playerId } = event;
-            const genome = context.genomes.find(g => g.playerId === playerId);
+            const { playerPublicKey } = event;
+            const genome = context.genomes.find(g => g.playerPublicKey === playerPublicKey);
             if (!genome || genome.dataClusters < 3) return {};
 
             return {
                 genomes: context.genomes.map(g =>
-                    g.playerId === playerId
+                    g.playerPublicKey === playerPublicKey
                         ? { ...g, dataClusters: g.dataClusters - 3, cubePool: g.cubePool + 1 }
                         : g
                 )
@@ -874,13 +903,13 @@ export const apexNebulaMachine = createMachine({
 
         pruneAttribute: assign(({ context, event }) => {
             if (event.type !== 'PRUNE_ATTRIBUTE') return {};
-            const { playerId, attribute } = event;
-            const genome = context.genomes.find(g => g.playerId === playerId);
+            const { playerPublicKey, attribute } = event;
+            const genome = context.genomes.find(g => g.playerPublicKey === playerPublicKey);
             if (!genome || genome.baseAttributes[attribute] <= 1) return {};
 
             return {
                 genomes: context.genomes.map(g =>
-                    g.playerId === playerId
+                    g.playerPublicKey === playerPublicKey
                         ? {
                             ...g,
                             baseAttributes: { ...g.baseAttributes, [attribute]: g.baseAttributes[attribute] - 1 },
@@ -910,7 +939,7 @@ export const apexNebulaMachine = createMachine({
 
         resetGame: assign(({ context }) => ({
             genomes: context.players.map(p => ({
-                playerId: p.id,
+                playerPublicKey: p.publicKey,
                 stability: 3,
                 dataClusters: 0,
                 rawMatter: 0,
@@ -925,7 +954,7 @@ export const apexNebulaMachine = createMachine({
             pieces: context.players.map((p, i) => {
                 const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
                 return {
-                    playerId: p.id,
+                    playerPublicKey: p.publicKey,
                     hexId: starts[i % starts.length],
                 };
             }),
@@ -969,14 +998,14 @@ export const apexNebulaMachine = createMachine({
             if (event.type !== 'MOVE_PLAYER') return false;
 
             // 1. Check if it's the player's turn
-            const activePlayerId = context.turnOrder[context.currentPlayerIndex];
-            if (event.playerId !== activePlayerId) {
-                console.log(`Guard: canMove failed - not ${event.playerId}'s turn. Active: ${activePlayerId}`);
+            const activePlayerPublicKey = context.turnOrder[context.currentPlayerIndex];
+            if (event.playerPublicKey !== activePlayerPublicKey) {
+                console.log(`Guard: canMove failed - not ${event.playerPublicKey}'s turn. Active: ${activePlayerPublicKey}`);
                 return false;
             }
 
-            const genome = context.genomes.find(g => g.playerId === event.playerId);
-            const piece = context.pieces.find(p => p.playerId === event.playerId);
+            const genome = context.genomes.find(g => g.playerPublicKey === event.playerPublicKey);
+            const piece = context.pieces.find(p => p.playerPublicKey === event.playerPublicKey);
             const targetHex = context.hexGrid.find(h => h.id === event.hexId);
             const currentHex = context.hexGrid.find(h => h.id === piece?.hexId);
 
@@ -1000,7 +1029,7 @@ export const apexNebulaMachine = createMachine({
 
             // 4. NAV check (movesMade + moveCost <= NAV)
             const nav = (genome.baseAttributes['NAV'] || 0) + (genome.mutationModifiers['NAV'] || 0);
-            const actions = context.phenotypeActions[event.playerId] || { movesMade: 0, harvestDone: false };
+            const actions = context.phenotypeActions[event.playerPublicKey] || { movesMade: 0, harvestDone: false };
             const isDoubleAward = targetHex.yield.matter > 0 && targetHex.yield.data > 0;
             const moveCost = isDoubleAward ? 2 : 1;
 

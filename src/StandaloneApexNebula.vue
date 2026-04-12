@@ -7,8 +7,8 @@ import { INITIAL_EVENT_DECK } from './eventUtils';
 import { ChevronDown } from 'lucide-vue-next';
 
 const mockPlayers: PlayerInfo[] = [
-  { id: 'player1', name: 'Alpha AI', status: 'game', isConnected: true, isLocal: true, isHost: true },
-  { id: 'player2', name: 'Beta AI', status: 'game', isConnected: true, isLocal: false, isHost: false },
+  { publicKey: 'player1', id: 'player1', name: 'Alpha AI', status: 'game', isConnected: true, isLocal: true, isHost: true },
+  { publicKey: 'player2', id: 'player2', name: 'Beta AI', status: 'game', isConnected: true, isLocal: false, isHost: false },
 ];
 
 const mockConnections = ref<SimpleConnection[]>([]);
@@ -87,29 +87,29 @@ const forceBetaAIDistribution = async () => {
       const attr = attrs[i] as any;
       if (dist[i] > 1) {
         sendDebugMessage('DISTRIBUTE_CUBES', {
-          playerId: 'player2',
+          playerPublicKey: 'player2',
           attribute: attr,
           amount: dist[i] - 1,
         });
         await new Promise(r => setTimeout(r, 50));
       }
     }
-    sendDebugMessage('CONFIRM_PHASE', { playerId: 'player2' });
+    sendDebugMessage('CONFIRM_PHASE', { playerPublicKey: 'player2' });
   } finally {
     isProcessing.value = false;
   }
 };
 
 const betaAIConfirm = () => {
-  sendDebugMessage('CONFIRM_PHASE', { playerId: 'player2' });
+  sendDebugMessage('CONFIRM_PHASE', { playerPublicKey: 'player2' });
 };
 
 const betaAIFinish = () => {
-  sendDebugMessage('FINISH_TURN', { playerId: 'player2' });
+  sendDebugMessage('FINISH_TURN', { playerPublicKey: 'player2' });
 };
 
 const betaAIOptConfirm = () => {
-  sendDebugMessage('CONFIRM_PHASE', { playerId: 'player2' });
+  sendDebugMessage('CONFIRM_PHASE', { playerPublicKey: 'player2' });
 };
 
 const forceAlphaAIDistribution = async () => {
@@ -120,13 +120,13 @@ const forceAlphaAIDistribution = async () => {
     const attrs: any[] = ['NAV', 'LOG', 'DEF', 'SCN'];
     for (const attr of attrs) {
       sendDebugMessage('DISTRIBUTE_CUBES', {
-        playerId: 'player1',
+        playerPublicKey: 'player1',
         attribute: attr,
         amount: 2,
       });
       await new Promise(r => setTimeout(r, 50));
     }
-    sendDebugMessage('CONFIRM_PHASE', { playerId: 'player1' });
+    sendDebugMessage('CONFIRM_PHASE', { playerPublicKey: 'player1' });
   } finally {
     isProcessing.value = false;
   }

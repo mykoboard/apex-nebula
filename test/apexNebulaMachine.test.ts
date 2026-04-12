@@ -8,15 +8,15 @@ import type { Player } from '../src/types';
 const TEST_SEED = 42;
 
 const TEST_PLAYERS: Player[] = [
-    { id: 'p1', name: 'Alpha', color: 'red' },
-    { id: 'p2', name: 'Beta', color: 'blue' },
+    { publicKey: 'p1', name: 'Alpha', color: 'red' },
+    { publicKey: 'p2', name: 'Beta', color: 'blue' },
 ];
 
 /** Create a started actor with optional overrides */
 function createTestActor(overrides: Record<string, unknown> = {}) {
     const actor = createActor(apexNebulaMachine, {
         input: {
-            localPlayerId: 'p1',
+            localPublicKey: 'p1',
             isInitiator: true,
             seed: TEST_SEED,
             ...overrides,
@@ -35,11 +35,18 @@ function createStartedGame(overrides: Record<string, unknown> = {}) {
 
 /** Distribute all 8 remaining cubes evenly (2 per attr) and confirm both players */
 function completeSetup(actor: ReturnType<typeof createActor<typeof apexNebulaMachine>>) {
-    for (const playerId of ['p1', 'p2']) {
-        for (const attr of ['NAV', 'LOG', 'DEF', 'SCN'] as const) {
-            actor.send({ type: 'DISTRIBUTE_CUBES', playerId, attribute: attr, amount: 2 });
-        }
-        actor.send({ type: 'CONFIRM_PHASE', playerId });
+    for (const playerPublicKey of ['p1', 'p2']) {
+        actor.send({ 
+            type: 'DISTRIBUTE_CUBES', 
+            playerPublicKey, 
+            distributions: [
+                { attribute: 'NAV', amount: 2 },
+                { attribute: 'LOG', amount: 2 },
+                { attribute: 'DEF', amount: 2 },
+                { attribute: 'SCN', amount: 2 }
+            ]
+        });
+        actor.send({ type: 'CONFIRM_PHASE', playerPublicKey });
     }
 }
 
@@ -48,8 +55,8 @@ function advanceToPhenotype(actor: ReturnType<typeof createActor<typeof apexNebu
     completeSetup(actor);
     // After setup, machine auto-transitions to mutation phase.
     // Confirm mutation phase for both players to advance to phenotype.
-    actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-    actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+    actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+    actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -66,15 +73,24 @@ describe('apexNebulaMachine', () => {
             actor.stop();
         });
 
-        test('preserves localPlayerId from input', () => {
-            const actor = createTestActor({ localPlayerId: 'my-player' });
-            expect(actor.getSnapshot().context.localPlayerId).toBe('my-player');
+        test('preserves localPublicKey from input', () => {
+            const actor = createTestActor({ localPublicKey: 'my-player' });
+            expect(actor.getSnapshot().context.localPublicKey).toBe('my-player');
             actor.stop();
         });
 
         test('preserves isInitiator from input', () => {
             const actor = createTestActor({ isInitiator: false });
             expect(actor.getSnapshot().context.isInitiator).toBe(false);
+            actor.stop();
+        });
+
+        test('updates localPublicKey via SET_LOCAL_PLAYER', () => {
+            const actor = createTestActor({ localPublicKey: '' });
+            expect(actor.getSnapshot().context.localPublicKey).toBe('');
+            
+            actor.send({ type: 'SET_LOCAL_PLAYER', publicKey: 'late-resolved-id' });
+            expect(actor.getSnapshot().context.localPublicKey).toBe('late-resolved-id');
             actor.stop();
         });
     });
@@ -97,8 +113,8 @@ describe('apexNebulaMachine', () => {
             expect(ctx.genomes).toHaveLength(2);
             expect(ctx.pieces).toHaveLength(2);
 
-            expect(ctx.players[0].id).toBe('p1');
-            expect(ctx.players[1].id).toBe('p2');
+            expect(ctx.players[0].publicKey).toBe('p1');
+            expect(ctx.players[1].publicKey).toBe('p2');
             actor.stop();
         });
 
@@ -106,7 +122,7 @@ describe('apexNebulaMachine', () => {
             const actor = createStartedGame();
             const genome = actor.getSnapshot().context.genomes[0];
 
-            expect(genome.playerId).toBe('p1');
+            expect(genome.playerPublicKey).toBe('p1');
             expect(genome.stability).toBe(3);
             expect(genome.dataClusters).toBe(0);
             expect(genome.rawMatter).toBe(0);
@@ -125,12 +141,26 @@ describe('apexNebulaMachine', () => {
             actor.stop();
         });
 
-        test('sets seed and turnOrder', () => {
-            const actor = createStartedGame();
-            const ctx = actor.getSnapshot().context;
+        test('sets seed and turnOrder (sorted by publicKey)', () => {
+            const actor = createActor(apexNebulaMachine, {
+                input: { localPublicKey: 'p1', isInitiator: true, seed: TEST_SEED }
+            });
+            actor.start();
+            // Send unordered players: p2 then p1
+            actor.send({ 
+                type: 'START_GAME', 
+                seed: TEST_SEED, 
+                players: [
+                    { publicKey: 'p2', name: 'Beta', color: 'blue' },
+                    { publicKey: 'p1', name: 'Alpha', color: 'red' }
+                ] 
+            });
 
+            const ctx = actor.getSnapshot().context;
             expect(ctx.seed).toBe(TEST_SEED);
+            // turnOrder should be sorted ['p1', 'p2'] despite input order
             expect(ctx.turnOrder).toEqual(['p1', 'p2']);
+            expect(ctx.players[0].publicKey).toBe('p1');
             actor.stop();
         });
 
@@ -150,9 +180,9 @@ describe('apexNebulaMachine', () => {
     describe('setupPhase', () => {
         test('DISTRIBUTE_CUBES increases attribute and decreases cube pool', () => {
             const actor = createStartedGame();
-            actor.send({ type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'NAV', amount: 2 });
+            actor.send({ type: 'DISTRIBUTE_CUBES', playerPublicKey: 'p1', distributions: [{ attribute: 'NAV', amount: 2 }] });
 
-            const genome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const genome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             expect(genome.baseAttributes.NAV).toBe(3);  // 1 base + 2
             expect(genome.cubePool).toBe(6);  // 8 - 2
             actor.stop();
@@ -161,9 +191,9 @@ describe('apexNebulaMachine', () => {
         test('DISTRIBUTE_CUBES rejects amount that would exceed setup cap of 6', () => {
             const actor = createStartedGame();
             // Try to set NAV to 7 (1 base + 6) — should be rejected
-            actor.send({ type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'NAV', amount: 6 });
+            actor.send({ type: 'DISTRIBUTE_CUBES', playerPublicKey: 'p1', distributions: [{ attribute: 'NAV', amount: 6 }] });
 
-            const genome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const genome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             // During setup, max is 6. 1 + 6 = 7 > 6, so should be blocked
             expect(genome.baseAttributes.NAV).toBe(1); // unchanged
             actor.stop();
@@ -171,9 +201,9 @@ describe('apexNebulaMachine', () => {
 
         test('DISTRIBUTE_CUBES allows up to 6 during setup', () => {
             const actor = createStartedGame();
-            actor.send({ type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'NAV', amount: 5 });
+            actor.send({ type: 'DISTRIBUTE_CUBES', playerPublicKey: 'p1', distributions: [{ attribute: 'NAV', amount: 5 }] });
 
-            const genome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const genome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             expect(genome.baseAttributes.NAV).toBe(6);  // 1 + 5
             expect(genome.cubePool).toBe(3);  // 8 - 5
             actor.stop();
@@ -181,9 +211,9 @@ describe('apexNebulaMachine', () => {
 
         test('DISTRIBUTE_CUBES only affects the target player', () => {
             const actor = createStartedGame();
-            actor.send({ type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'LOG', amount: 3 });
+            actor.send({ type: 'DISTRIBUTE_CUBES', playerPublicKey: 'p1', distributions: [{ attribute: 'LOG', amount: 3 }] });
 
-            const p2Genome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p2')!;
+            const p2Genome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p2')!;
             expect(p2Genome.baseAttributes.LOG).toBe(1); // unchanged
             expect(p2Genome.cubePool).toBe(8);            // unchanged
             actor.stop();
@@ -192,10 +222,8 @@ describe('apexNebulaMachine', () => {
         test('CONFIRM_PHASE adds player to confirmedPlayers', () => {
             const actor = createStartedGame();
             // Must distribute all cubes first
-            for (const attr of ['NAV', 'LOG', 'DEF', 'SCN'] as const) {
-                actor.send({ type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: attr, amount: 2 });
-            }
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
+            actor.send({ type: "DISTRIBUTE_CUBES", playerPublicKey: "p1", distributions: [{ attribute: "NAV", amount: 2 }, { attribute: "LOG", amount: 2 }, { attribute: "DEF", amount: 2 }, { attribute: "SCN", amount: 2 }] });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
 
             expect(actor.getSnapshot().context.confirmedPlayers).toContain('p1');
             actor.stop();
@@ -203,11 +231,18 @@ describe('apexNebulaMachine', () => {
 
         test('CONFIRM_PHASE is idempotent — duplicate confirmation is ignored', () => {
             const actor = createStartedGame();
-            for (const attr of ['NAV', 'LOG', 'DEF', 'SCN'] as const) {
-                actor.send({ type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: attr, amount: 2 });
-            }
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
+            actor.send({ 
+                type: 'DISTRIBUTE_CUBES', 
+                playerPublicKey: 'p1', 
+                distributions: [
+                    { attribute: 'NAV', amount: 2 },
+                    { attribute: 'LOG', amount: 2 },
+                    { attribute: 'DEF', amount: 2 },
+                    { attribute: 'SCN', amount: 2 }
+                ] 
+            });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
 
             const confirmed = actor.getSnapshot().context.confirmedPlayers.filter(id => id === 'p1');
             expect(confirmed).toHaveLength(1);
@@ -229,7 +264,7 @@ describe('apexNebulaMachine', () => {
 
             const ctx = actor.getSnapshot().context;
             expect(ctx.turnOrder).toHaveLength(2);
-            expect(ctx.priorityPlayerId).toBeTruthy();
+            expect(ctx.priorityPublicKey).toBeTruthy();
             expect(ctx.turnOrder).toContain('p1');
             expect(ctx.turnOrder).toContain('p2');
             actor.stop();
@@ -284,7 +319,7 @@ describe('apexNebulaMachine', () => {
 
             const ctx = actor.getSnapshot().context;
             const p1Result = ctx.mutationResults['p1'];
-            const p1Genome = ctx.genomes.find(g => g.playerId === 'p1')!;
+            const p1Genome = ctx.genomes.find(g => g.playerPublicKey === 'p1')!;
 
             // The affected attribute should have the magnitude applied
             expect(p1Genome.mutationModifiers[p1Result.attr]).toBe(p1Result.magnitude);
@@ -295,8 +330,8 @@ describe('apexNebulaMachine', () => {
             const actor = createStartedGame();
             completeSetup(actor);
 
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 
             expect(actor.getSnapshot().value).toBe('phenotypePhase');
             expect(actor.getSnapshot().context.gamePhase).toBe('phenotype');
@@ -331,11 +366,11 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            const activePlayerId = ctx.turnOrder[0];
-            const inactivePlayerId = ctx.turnOrder[1];
+            const activePlayerPublicKey = ctx.turnOrder[0];
+            const inactivePlayerPublicKey = ctx.turnOrder[1];
 
             // Find a valid adjacent hex for the inactive player
-            const inactivePiece = ctx.pieces.find(p => p.playerId === inactivePlayerId)!;
+            const inactivePiece = ctx.pieces.find(p => p.playerPublicKey === inactivePlayerPublicKey)!;
             const inactiveHex = ctx.hexGrid.find(h => h.id === inactivePiece.hexId)!;
             const adjacentHex = ctx.hexGrid.find(h => {
                 const dx = Math.abs(h.x - inactiveHex.x);
@@ -345,9 +380,9 @@ describe('apexNebulaMachine', () => {
             });
 
             if (adjacentHex) {
-                actor.send({ type: 'MOVE_PLAYER', playerId: inactivePlayerId, hexId: adjacentHex.id });
+                actor.send({ type: 'MOVE_PLAYER', playerPublicKey: inactivePlayerPublicKey, hexId: adjacentHex.id });
                 // Should not have moved
-                const piece = actor.getSnapshot().context.pieces.find(p => p.playerId === inactivePlayerId)!;
+                const piece = actor.getSnapshot().context.pieces.find(p => p.playerPublicKey === inactivePlayerPublicKey)!;
                 expect(piece.hexId).toBe(inactivePiece.hexId);
             }
             actor.stop();
@@ -358,8 +393,8 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            const activePlayerId = ctx.turnOrder[0];
-            const piece = ctx.pieces.find(p => p.playerId === activePlayerId)!;
+            const activePlayerPublicKey = ctx.turnOrder[0];
+            const piece = ctx.pieces.find(p => p.playerPublicKey === activePlayerPublicKey)!;
             const currentHex = ctx.hexGrid.find(h => h.id === piece.hexId)!;
 
             // Find an adjacent hex
@@ -371,8 +406,8 @@ describe('apexNebulaMachine', () => {
             });
 
             if (adjacentHex) {
-                actor.send({ type: 'MOVE_PLAYER', playerId: activePlayerId, hexId: adjacentHex.id });
-                const newPiece = actor.getSnapshot().context.pieces.find(p => p.playerId === activePlayerId)!;
+                actor.send({ type: 'MOVE_PLAYER', playerPublicKey: activePlayerPublicKey, hexId: adjacentHex.id });
+                const newPiece = actor.getSnapshot().context.pieces.find(p => p.playerPublicKey === activePlayerPublicKey)!;
                 expect(newPiece.hexId).toBe(adjacentHex.id);
             }
             actor.stop();
@@ -383,8 +418,8 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            const activePlayerId = ctx.turnOrder[0];
-            const piece = ctx.pieces.find(p => p.playerId === activePlayerId)!;
+            const activePlayerPublicKey = ctx.turnOrder[0];
+            const piece = ctx.pieces.find(p => p.playerPublicKey === activePlayerPublicKey)!;
             const currentHex = ctx.hexGrid.find(h => h.id === piece.hexId)!;
 
             const adjacentHex = ctx.hexGrid.find(h => {
@@ -395,8 +430,8 @@ describe('apexNebulaMachine', () => {
             });
 
             if (adjacentHex) {
-                actor.send({ type: 'MOVE_PLAYER', playerId: activePlayerId, hexId: adjacentHex.id });
-                const actions = actor.getSnapshot().context.phenotypeActions[activePlayerId];
+                actor.send({ type: 'MOVE_PLAYER', playerPublicKey: activePlayerPublicKey, hexId: adjacentHex.id });
+                const actions = actor.getSnapshot().context.phenotypeActions[activePlayerPublicKey];
                 expect(actions).toBeDefined();
                 expect(actions.movesMade).toBeGreaterThan(0);
             }
@@ -408,8 +443,8 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            const activePlayerId = ctx.turnOrder[0];
-            const piece = ctx.pieces.find(p => p.playerId === activePlayerId)!;
+            const activePlayerPublicKey = ctx.turnOrder[0];
+            const piece = ctx.pieces.find(p => p.playerPublicKey === activePlayerPublicKey)!;
             const currentHex = ctx.hexGrid.find(h => h.id === piece.hexId)!;
 
             // Find a hex at distance > 1
@@ -421,8 +456,8 @@ describe('apexNebulaMachine', () => {
             });
 
             if (farHex) {
-                actor.send({ type: 'MOVE_PLAYER', playerId: activePlayerId, hexId: farHex.id });
-                const newPiece = actor.getSnapshot().context.pieces.find(p => p.playerId === activePlayerId)!;
+                actor.send({ type: 'MOVE_PLAYER', playerPublicKey: activePlayerPublicKey, hexId: farHex.id });
+                const newPiece = actor.getSnapshot().context.pieces.find(p => p.playerPublicKey === activePlayerPublicKey)!;
                 expect(newPiece.hexId).toBe(piece.hexId); // unmoved
             }
             actor.stop();
@@ -433,9 +468,9 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            const firstPlayer = ctx.turnOrder[0];
+            const firstPlayerPublicKey = ctx.turnOrder[0];
 
-            actor.send({ type: 'FINISH_TURN', playerId: firstPlayer });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: firstPlayerPublicKey });
 
             expect(actor.getSnapshot().context.currentPlayerIndex).toBe(1);
             expect(actor.getSnapshot().value).toBe('phenotypePhase'); // still in phenotype
@@ -448,8 +483,8 @@ describe('apexNebulaMachine', () => {
 
             const ctx = actor.getSnapshot().context;
             // Finish both players' turns
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
 
             expect(actor.getSnapshot().value).toBe('environmentalPhase');
             expect(actor.getSnapshot().context.gamePhase).toBe('environmental');
@@ -461,8 +496,8 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            const activePlayerId = ctx.turnOrder[0];
-            const piece = ctx.pieces.find(p => p.playerId === activePlayerId)!;
+            const activePlayerPublicKey = ctx.turnOrder[0];
+            const piece = ctx.pieces.find(p => p.playerPublicKey === activePlayerPublicKey)!;
             const currentHex = ctx.hexGrid.find(h => h.id === piece.hexId)!;
 
             const adjacentHex = ctx.hexGrid.find(h => {
@@ -473,10 +508,10 @@ describe('apexNebulaMachine', () => {
             });
 
             if (adjacentHex) {
-                actor.send({ type: 'MOVE_PLAYER', playerId: activePlayerId, hexId: adjacentHex.id });
+                actor.send({ type: 'MOVE_PLAYER', playerPublicKey: activePlayerPublicKey, hexId: adjacentHex.id });
                 const results = actor.getSnapshot().context.lastHarvestResults;
                 expect(results.length).toBeGreaterThan(0);
-                expect(results[0].playerId).toBe(activePlayerId);
+                expect(results[0].playerPublicKey).toBe(activePlayerPublicKey);
             }
             actor.stop();
         });
@@ -490,8 +525,8 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
 
             const envCtx = actor.getSnapshot().context;
             expect(envCtx.currentEvent).not.toBeNull();
@@ -505,8 +540,8 @@ describe('apexNebulaMachine', () => {
             const deckBefore = actor.getSnapshot().context.eventDeck.length;
 
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
 
             expect(actor.getSnapshot().context.eventDeck.length).toBe(deckBefore - 1);
             actor.stop();
@@ -517,8 +552,8 @@ describe('apexNebulaMachine', () => {
             advanceToPhenotype(actor);
 
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
 
             actor.send({ type: 'NEXT_PHASE' });
 
@@ -568,8 +603,8 @@ describe('apexNebulaMachine', () => {
         function advanceToOptimization(actor: ReturnType<typeof createActor<typeof apexNebulaMachine>>) {
             advanceToPhenotype(actor);
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
             actor.send({ type: 'NEXT_PHASE' }); // env → competitive
             actor.send({ type: 'NEXT_PHASE' }); // competitive → optimization
         }
@@ -578,13 +613,13 @@ describe('apexNebulaMachine', () => {
             const actor = createStartedGame();
             advanceToOptimization(actor);
 
-            const beforeGenome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const beforeGenome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             const navBefore = beforeGenome.baseAttributes.NAV;
             const matterBefore = beforeGenome.rawMatter;
 
-            actor.send({ type: 'PRUNE_ATTRIBUTE', playerId: 'p1', attribute: 'NAV' });
+            actor.send({ type: 'PRUNE_ATTRIBUTE', playerPublicKey: 'p1', attribute: 'NAV' });
 
-            const afterGenome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const afterGenome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             expect(afterGenome.baseAttributes.NAV).toBe(navBefore - 1);
             expect(afterGenome.rawMatter).toBe(matterBefore + 2);
             actor.stop();
@@ -593,31 +628,37 @@ describe('apexNebulaMachine', () => {
         test('PRUNE_ATTRIBUTE is blocked when attribute is at minimum (1)', () => {
             const actor = createStartedGame();
             // Setup with minimal NAV (1)
-            for (const playerId of ['p1', 'p2']) {
+            for (const playerPublicKey of ['p1', 'p2']) {
                 // Put all cubes into LOG, leave NAV at 1
-                actor.send({ type: 'DISTRIBUTE_CUBES', playerId, attribute: 'LOG', amount: 5 });
-                actor.send({ type: 'DISTRIBUTE_CUBES', playerId, attribute: 'DEF', amount: 2 });
-                actor.send({ type: 'DISTRIBUTE_CUBES', playerId, attribute: 'SCN', amount: 1 });
-                actor.send({ type: 'CONFIRM_PHASE', playerId });
+                actor.send({ 
+                    type: 'DISTRIBUTE_CUBES', 
+                    playerPublicKey, 
+                    distributions: [
+                        { attribute: 'LOG', amount: 5 },
+                        { attribute: 'DEF', amount: 2 },
+                        { attribute: 'SCN', amount: 1 }
+                    ]
+                });
+                actor.send({ type: 'CONFIRM_PHASE', playerPublicKey });
             }
             // Advance through mutation + phenotype + env + competitive
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
             actor.send({ type: 'NEXT_PHASE' });
             actor.send({ type: 'NEXT_PHASE' });
 
             expect(actor.getSnapshot().value).toBe('optimizationPhase');
 
             // NAV should be 1 — pruning should be blocked
-            const genome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const genome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             expect(genome.baseAttributes.NAV).toBe(1);
 
-            actor.send({ type: 'PRUNE_ATTRIBUTE', playerId: 'p1', attribute: 'NAV' });
+            actor.send({ type: 'PRUNE_ATTRIBUTE', playerPublicKey: 'p1', attribute: 'NAV' });
 
-            const afterGenome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const afterGenome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             expect(afterGenome.baseAttributes.NAV).toBe(1); // still 1
             actor.stop();
         });
@@ -629,14 +670,14 @@ describe('apexNebulaMachine', () => {
             // Manually give player data for testing by manipulating via multiple harvests... 
             // Instead, use a fresh game where we can set data directly.
             // The machine doesn't allow setting data directly, so let's test the guard path instead.
-            const genome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const genome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             if (genome.dataClusters >= 3) {
                 const dataBefore = genome.dataClusters;
                 const poolBefore = genome.cubePool;
 
-                actor.send({ type: 'OPTIMIZE_DATA', playerId: 'p1' });
+                actor.send({ type: 'OPTIMIZE_DATA', playerPublicKey: 'p1' });
 
-                const after = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+                const after = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
                 expect(after.dataClusters).toBe(dataBefore - 3);
                 expect(after.cubePool).toBe(poolBefore + 1);
             }
@@ -647,14 +688,14 @@ describe('apexNebulaMachine', () => {
             const actor = createStartedGame();
             advanceToOptimization(actor);
 
-            const genome = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+            const genome = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
             const dataBefore = genome.dataClusters;
             const poolBefore = genome.cubePool;
 
             if (dataBefore < 3) {
-                actor.send({ type: 'OPTIMIZE_DATA', playerId: 'p1' });
+                actor.send({ type: 'OPTIMIZE_DATA', playerPublicKey: 'p1' });
                 // Should be unchanged
-                const after = actor.getSnapshot().context.genomes.find(g => g.playerId === 'p1')!;
+                const after = actor.getSnapshot().context.genomes.find(g => g.playerPublicKey === 'p1')!;
                 expect(after.dataClusters).toBe(dataBefore);
                 expect(after.cubePool).toBe(poolBefore);
             }
@@ -665,8 +706,8 @@ describe('apexNebulaMachine', () => {
             const actor = createStartedGame();
             advanceToOptimization(actor);
 
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 
             expect(actor.getSnapshot().value).toBe('mutationPhase');
             expect(actor.getSnapshot().context.round).toBe(2);
@@ -677,8 +718,8 @@ describe('apexNebulaMachine', () => {
             const actor = createStartedGame();
             advanceToOptimization(actor);
 
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 
             // After finalization (transition through nextRound to mutationPhase)
             const ctx = actor.getSnapshot().context;
@@ -702,14 +743,14 @@ describe('apexNebulaMachine', () => {
             expect(actor.getSnapshot().value).toBe('mutationPhase');
 
             // Mutation
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
             expect(actor.getSnapshot().value).toBe('phenotypePhase');
 
             // Phenotype
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
             expect(actor.getSnapshot().value).toBe('environmentalPhase');
 
             // Environmental
@@ -722,8 +763,8 @@ describe('apexNebulaMachine', () => {
 
             // Optimization → next round
             expect(actor.getSnapshot().context.round).toBe(1);
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 
             expect(actor.getSnapshot().value).toBe('mutationPhase');
             expect(actor.getSnapshot().context.round).toBe(2);
@@ -737,15 +778,15 @@ describe('apexNebulaMachine', () => {
             const r1Results = { ...actor.getSnapshot().context.mutationResults };
 
             // Complete round 1
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
             actor.send({ type: 'NEXT_PHASE' });
             actor.send({ type: 'NEXT_PHASE' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            actor.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 
             // Now in round 2 mutationPhase
             const r2Results = actor.getSnapshot().context.mutationResults;
@@ -765,10 +806,10 @@ describe('apexNebulaMachine', () => {
         test('two machines processing identical events produce identical state', () => {
             // Simulate host and guest running independently
             const host = createActor(apexNebulaMachine, {
-                input: { localPlayerId: 'p1', isInitiator: true, seed: TEST_SEED },
+                input: { localPublicKey: 'p1', isInitiator: true, seed: TEST_SEED },
             });
             const guest = createActor(apexNebulaMachine, {
-                input: { localPlayerId: 'p2', isInitiator: false, seed: TEST_SEED },
+                input: { localPublicKey: 'p2', isInitiator: false, seed: TEST_SEED },
             });
             host.start();
             guest.start();
@@ -785,14 +826,19 @@ describe('apexNebulaMachine', () => {
 
             // Distribute cubes — both process the same events
             const cubeEvents = [
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p1', attribute: 'NAV' as const, amount: 2 },
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p1', attribute: 'LOG' as const, amount: 2 },
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p1', attribute: 'DEF' as const, amount: 2 },
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p1', attribute: 'SCN' as const, amount: 2 },
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p2', attribute: 'NAV' as const, amount: 3 },
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p2', attribute: 'LOG' as const, amount: 2 },
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p2', attribute: 'DEF' as const, amount: 2 },
-                { type: 'DISTRIBUTE_CUBES' as const, playerId: 'p2', attribute: 'SCN' as const, amount: 1 },
+                { type: 'DISTRIBUTE_CUBES' as const, playerPublicKey: 'p1', distributions: [
+                    { attribute: 'NAV' as const, amount: 2 },
+                    { attribute: 'LOG' as const, amount: 2 },
+                    { attribute: 'DEF' as const, amount: 2 },
+                    { attribute: 'SCN' as const, amount: 2 }
+                ] },
+                { type: 'DISTRIBUTE_CUBES' as const, playerPublicKey: 'p2', distributions: [
+                    { attribute: 'NAV' as const, amount: 3 },
+                    { attribute: 'LOG' as const, amount: 2 },
+                    { attribute: 'DEF' as const, amount: 2 },
+                    { attribute: 'SCN' as const, amount: 1 }
+                ] },
+
             ];
 
             for (const event of cubeEvents) {
@@ -801,10 +847,10 @@ describe('apexNebulaMachine', () => {
             }
 
             // Confirm both
-            host.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            guest.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            host.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
-            guest.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            host.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            guest.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            host.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
+            guest.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 
             // Both should be in mutationPhase with identical state
             expect(host.getSnapshot().value).toBe('mutationPhase');
@@ -819,19 +865,19 @@ describe('apexNebulaMachine', () => {
             guest.stop();
         });
 
-        test('localPlayerId and isInitiator differ but game state converges', () => {
+        test('localPublicKey and isInitiator differ but game state converges', () => {
             const host = createActor(apexNebulaMachine, {
-                input: { localPlayerId: 'p1', isInitiator: true, seed: TEST_SEED },
+                input: { localPublicKey: 'p1', isInitiator: true, seed: TEST_SEED },
             });
             const guest = createActor(apexNebulaMachine, {
-                input: { localPlayerId: 'p2', isInitiator: false, seed: TEST_SEED },
+                input: { localPublicKey: 'p2', isInitiator: false, seed: TEST_SEED },
             });
             host.start();
             guest.start();
 
-            // localPlayerId and isInitiator should differ
-            expect(host.getSnapshot().context.localPlayerId).toBe('p1');
-            expect(guest.getSnapshot().context.localPlayerId).toBe('p2');
+            // localPublicKey and isInitiator should differ
+            expect(host.getSnapshot().context.localPublicKey).toBe('p1');
+            expect(guest.getSnapshot().context.localPublicKey).toBe('p2');
             expect(host.getSnapshot().context.isInitiator).toBe(true);
             expect(guest.getSnapshot().context.isInitiator).toBe(false);
 
@@ -856,22 +902,27 @@ describe('apexNebulaMachine', () => {
             const events: Array<Record<string, unknown>> = [
                 { type: 'START_GAME', seed: TEST_SEED, players: TEST_PLAYERS },
                 // Setup: distribute for p1
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'NAV', amount: 2 },
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'LOG', amount: 2 },
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'DEF', amount: 2 },
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p1', attribute: 'SCN', amount: 2 },
+                { type: 'DISTRIBUTE_CUBES', playerPublicKey: 'p1', distributions: [
+                    { attribute: 'NAV', amount: 2 },
+                    { attribute: 'LOG', amount: 2 },
+                    { attribute: 'DEF', amount: 2 },
+                    { attribute: 'SCN', amount: 2 }
+                ] },
                 // Setup: distribute for p2
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p2', attribute: 'NAV', amount: 2 },
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p2', attribute: 'LOG', amount: 2 },
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p2', attribute: 'DEF', amount: 2 },
-                { type: 'DISTRIBUTE_CUBES', playerId: 'p2', attribute: 'SCN', amount: 2 },
+                { type: 'DISTRIBUTE_CUBES', playerPublicKey: 'p2', distributions: [
+                    { attribute: 'NAV', amount: 2 },
+                    { attribute: 'LOG', amount: 2 },
+                    { attribute: 'DEF', amount: 2 },
+                    { attribute: 'SCN', amount: 2 }
+                ] },
+
                 // Confirm setup
-                { type: 'CONFIRM_PHASE', playerId: 'p1' },
-                { type: 'CONFIRM_PHASE', playerId: 'p2' },
+                { type: 'CONFIRM_PHASE', playerPublicKey: 'p1' },
+                { type: 'CONFIRM_PHASE', playerPublicKey: 'p2' },
                 // → mutationPhase (auto-applied)
                 // Confirm mutation
-                { type: 'CONFIRM_PHASE', playerId: 'p1' },
-                { type: 'CONFIRM_PHASE', playerId: 'p2' },
+                { type: 'CONFIRM_PHASE', playerPublicKey: 'p1' },
+                { type: 'CONFIRM_PHASE', playerPublicKey: 'p2' },
                 // → phenotypePhase
             ];
 
@@ -886,10 +937,10 @@ describe('apexNebulaMachine', () => {
             expect(hostTurn).toEqual(guestTurn);
 
             // Finish turns
-            host.send({ type: 'FINISH_TURN', playerId: hostTurn[0] });
-            guest.send({ type: 'FINISH_TURN', playerId: hostTurn[0] });
-            host.send({ type: 'FINISH_TURN', playerId: hostTurn[1] });
-            guest.send({ type: 'FINISH_TURN', playerId: hostTurn[1] });
+            host.send({ type: 'FINISH_TURN', playerPublicKey: hostTurn[0] });
+            guest.send({ type: 'FINISH_TURN', playerPublicKey: hostTurn[0] });
+            host.send({ type: 'FINISH_TURN', playerPublicKey: hostTurn[1] });
+            guest.send({ type: 'FINISH_TURN', playerPublicKey: hostTurn[1] });
 
             // → environmentalPhase
             expect(host.getSnapshot().value).toBe('environmentalPhase');
@@ -907,10 +958,10 @@ describe('apexNebulaMachine', () => {
             guest.send({ type: 'NEXT_PHASE' });
 
             // Confirm optimization → next round
-            host.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            guest.send({ type: 'CONFIRM_PHASE', playerId: 'p1' });
-            host.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
-            guest.send({ type: 'CONFIRM_PHASE', playerId: 'p2' });
+            host.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            guest.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
+            host.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
+            guest.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
 
             // Both in round 2 mutation phase
             expect(host.getSnapshot().value).toBe('mutationPhase');
