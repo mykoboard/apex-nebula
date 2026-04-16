@@ -14,6 +14,7 @@ import EventDeck from './components/EventDeck.vue';
 import PhaseIndicator from './components/PhaseIndicator.vue';
 import CommandProtocol from './components/CommandProtocol.vue';
 import SingularityWonScreen from './components/SingularityWonScreen.vue';
+import { logger } from './lib/logger';
 
 import { Dna, Crown } from 'lucide-vue-next';
 
@@ -127,13 +128,13 @@ const handleMessage = (data: any) => {
 
         // Handle sync requests from late-joining or race-condition-hit guests
         if (rawMessage.type === 'SYNC_REQUEST') {
-          console.log('[ApexNebula] Received SYNC_REQUEST, re-broadcasting state...');
+          logger.net('Received SYNC_REQUEST, re-broadcasting state...');
           broadcastCurrentState();
         }
       }
     }
   } catch (error) {
-    console.error('[ApexNebula] Failed to process message:', error);
+    logger.error('Failed to process message', error);
   }
 };
 
@@ -146,7 +147,7 @@ const broadcastCurrentState = () => {
     };
     const message = createGameMessage('START_GAME', startPayload);
     props.connections.forEach((conn) => {
-      console.log('[ApexNebula] Re-sending START_GAME to guest');
+      logger.net('Re-sending START_GAME to guest');
       conn.send(JSON.stringify(message));
     });
   }
@@ -164,7 +165,7 @@ watch(
 
     // If we're a guest and just established a connection, request sync
     if (!props.isInitiator && conns.length > 0) {
-      console.log('[ApexNebula] Guest sending SYNC_REQUEST to all connections');
+      logger.net('Guest sending SYNC_REQUEST to all connections');
       conns.forEach((conn) => {
         conn.send(JSON.stringify({ namespace: 'game', type: 'SYNC_REQUEST', payload: {} }));
       });
@@ -188,18 +189,18 @@ const processedLedgerCount = ref(0);
 watch(
   () => (props.ledger ? [...props.ledger] : []),
   (ledger) => {
-    console.log(`[ApexNebula] Ledger watch triggered. Total items: ${ledger.length}. Processed so far: ${processedLedgerCount.value}`);
+    logger.ledger('Watch triggered', { total: ledger.length, processed: processedLedgerCount.value });
     if (!props.isInitiator && isWaiting.value && ledger && ledger.length > processedLedgerCount.value) {
       const newBlocks = ledger.slice(processedLedgerCount.value);
-      console.log(`[ApexNebula] REPLAYING LEDGER: Found ${newBlocks.length} new blocks to apply.`);
+      logger.ledger('REPLAYING LEDGER', { count: newBlocks.length });
       
       newBlocks.forEach((block: any) => {
         const action = block.action;
         if (action && action.type) {
-          console.log(`[ApexNebula] Replaying Action: ${action.type}`, action.payload);
+          logger.ledger('Replaying action', { type: action.type, payload: action.payload });
           send({ type: action.type as any, ...action.payload });
         } else {
-          console.warn('[ApexNebula] Skipping invalid ledger block (missing action):', block);
+          logger.warn('Skipping invalid ledger block (missing action)', block);
         }
       });
       processedLedgerCount.value = ledger.length;
@@ -219,7 +220,7 @@ watch(
   ([isInitiator, isWaiting, playerLen]: readonly [boolean, boolean, number]) => {
     // Only auto-start if there are at least 2 players joining
     if (isInitiator && isWaiting && playerLen >= 2) {
-      console.log('[ApexNebula] Auto-triggering START_GAME with', playerLen, 'players (Delayed for guest handshake)');
+      logger.net('Auto-triggering START_GAME', { playerLen });
       
       // Delay to give guest time to mount and attach listeners
       setTimeout(() => {
@@ -232,7 +233,7 @@ watch(
         // 2. Broadcast so the guest machine transitions identically
         const message = createGameMessage('START_GAME', startPayload);
         props.connections.forEach((conn) => {
-          console.log('[ApexNebula] Broadcasting START_GAME to connection');
+          logger.net('Broadcasting START_GAME to connection');
           conn.send(JSON.stringify(message));
         });
 
@@ -250,7 +251,7 @@ watch(
   resolvedLocalPublicKey,
   (newKey) => {
     if (newKey) {
-      console.log('[ApexNebula] Syncing local player public key to machine:', newKey);
+      logger.info('Syncing local player key with machine', newKey);
       send({ type: 'SET_LOCAL_PLAYER', publicKey: newKey });
     }
   },
@@ -264,7 +265,7 @@ const handleAction = (actionType: string, payload: any) => {
   // Events without playerPublicKey (NEXT_PHASE, INITIATE_MUTATION, etc.) pass through.
   const lpKey = state.value.context.localPublicKey || resolvedLocalPublicKey.value;
   if (payload?.playerPublicKey && lpKey && payload.playerPublicKey !== lpKey) {
-    console.warn(`[handleAction] Blocked ${actionType}: payload.playerPublicKey=${payload.playerPublicKey} !== localPublicKey=${lpKey}`);
+    logger.warn('Action blocked (ownership)', { type: actionType, payloadKey: payload.playerPublicKey, localKey: lpKey });
     return;
   }
 

@@ -8,6 +8,7 @@ import {
 import { createHexGrid } from './gridUtils';
 import { INITIAL_EVENT_DECK } from './eventUtils';
 import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded, calculateMaintenanceCost, getDeterministicOffset } from './utils';
+import { logger } from './lib/logger';
 
 const EMPTY_MODS = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
 
@@ -48,7 +49,7 @@ export const apexNebulaMachine = createMachine({
         waitingForPlayers: {
             entry: [
                 assign({ gamePhase: 'waiting' }),
-                () => console.log('Machine State: waitingForPlayers')
+                () => logger.machine('State: waitingForPlayers')
             ],
             on: {
                 START_GAME: {
@@ -94,7 +95,7 @@ export const apexNebulaMachine = createMachine({
         setupPhase: {
             entry: [
                 assign({ gamePhase: 'setup' }),
-                () => console.log('Machine State: setupPhase')
+                () => logger.machine('State: setupPhase')
             ],
             on: {
                 DISTRIBUTE_CUBES: {
@@ -118,7 +119,7 @@ export const apexNebulaMachine = createMachine({
                     confirmedPlayers: [] as string[]
                 }),
                 'applyAllMutations',
-                () => console.log('Machine State: mutationPhase (Mutations Auto-Applied)')
+                () => logger.machine('State: mutationPhase (Mutations Auto-Applied)')
             ],
             on: {
                 CONFIRM_PHASE: {
@@ -141,7 +142,7 @@ export const apexNebulaMachine = createMachine({
                     currentPlayerIndex: 0,
                     phenotypeActions: {} as Record<string, { movesMade: number; harvestDone: boolean }>
                 }),
-                () => console.log('Machine State: phenotypePhase')
+                () => logger.machine('State: phenotypePhase')
             ],
             on: {
                 MOVE_PLAYER: {
@@ -393,7 +394,7 @@ export const apexNebulaMachine = createMachine({
         moveAndHarvest: assign(({ context, event }) => {
             if (event.type !== 'MOVE_PLAYER') return {};
             const { playerPublicKey, hexId } = event;
-            console.log(`Action: moveAndHarvest for ${playerPublicKey} to ${hexId}`);
+            logger.action('moveAndHarvest', { playerPublicKey, hexId });
 
             const pieceIndex = context.pieces.findIndex(p => p.playerPublicKey === playerPublicKey);
             if (pieceIndex === -1) return {};
@@ -482,7 +483,7 @@ export const apexNebulaMachine = createMachine({
                 pieces: newPieces,
                 genomes: newGenomes.map(g => {
                     if (g.playerPublicKey === playerPublicKey && g.stability <= 0) {
-                        console.log(`STABILITY CRITICAL for ${playerPublicKey}. Triggering Hard Reboot.`);
+                        logger.warn('STABILITY CRITICAL (Harvest)', { playerPublicKey });
                         const playerIdx = context.players.findIndex(p => p.publicKey === playerPublicKey);
                         const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
                         const startHex = starts[playerIdx % starts.length];
@@ -538,7 +539,7 @@ export const apexNebulaMachine = createMachine({
         evaluateEnvironmentalFitness: assign(({ context }) => {
             if (!context.currentEvent) return {};
             const event = context.currentEvent;
-            console.log('--- EVALUATING EVENT:', event.name, '---');
+            logger.machine('EVALUATING EVENT', event.name);
             const checkType = event.checkType;
 
             // 1. Calculate threshold
@@ -554,10 +555,10 @@ export const apexNebulaMachine = createMachine({
 
             // 2. Identify target players
             const getPlayersByTarget = (target?: string): string[] => {
-                console.log('Finding targets for:', target);
+                logger.machine('Finding targets', target);
                 if (!target || target === 'self') {
                     const all = context.players.map(p => p.publicKey);
-                    console.log('Target self -> all players:', all);
+                    logger.machine('Target resolution (self -> all players)', all);
                     return all;
                 }
                 if (target === 'all') return context.players.map(p => p.publicKey);
@@ -565,13 +566,13 @@ export const apexNebulaMachine = createMachine({
                 if (target === 'lowest_sum') {
                     const sorted = [...newGenomes].sort((a, b) => calculateFitness(a, 'TOTAL_SUM') - calculateFitness(b, 'TOTAL_SUM'));
                     const low = sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
-                    console.log('Target lowest_sum ->', low);
+                    logger.machine('Target resolution (lowest_sum)', low);
                     return low;
                 }
                 if (target === 'highest_sum') {
                     const sorted = [...newGenomes].sort((a, b) => calculateFitness(b, 'TOTAL_SUM') - calculateFitness(a, 'TOTAL_SUM'));
                     const high = sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
-                    console.log('Target highest_sum ->', high);
+                    logger.machine('Target resolution (highest_sum)', high);
                     return high;
                 }
                 if (target === 'most_data') {
@@ -587,12 +588,12 @@ export const apexNebulaMachine = createMachine({
                 }
                 if (target === 'sum_26_plus') {
                     const res = newGenomes.filter(g => calculateFitness(g, 'TOTAL_SUM') >= 26).map(g => g.playerPublicKey);
-                    console.log('Target sum_26_plus ->', res);
+                    logger.machine('Target resolution (sum_26_plus)', res);
                     return res;
                 }
                 if (target === 'stat_8_plus') {
                     const res = newGenomes.filter(g => Object.values(g.baseAttributes).some(v => v >= 8)).map(g => g.playerPublicKey);
-                    console.log('Target stat_8_plus ->', res);
+                    logger.machine('Target resolution (stat_8_plus)', res);
                     return res;
                 }
                 return [];
@@ -661,7 +662,7 @@ export const apexNebulaMachine = createMachine({
                 }
                 const result = { ...newGenome };
                 if (result.stability <= 0) {
-                    console.log(`STABILITY CRITICAL (Event) for ${genome.playerPublicKey}. Triggering Hard Reboot.`);
+                    logger.warn('STABILITY CRITICAL (Event)', { playerPublicKey: genome.playerPublicKey });
                     const playerIdx = context.players.findIndex(p => p.publicKey === genome.playerPublicKey);
                     const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
                     const startHex = starts[playerIdx % starts.length];
@@ -709,7 +710,7 @@ export const apexNebulaMachine = createMachine({
                             }
                             return g;
                         });
-                        console.log(`Transferred ${amount} ${resource} from ${fromKey} to ${toKey}`);
+                        logger.action('Transfer', { amount, resource, fromKey, toKey });
                     }
                 } else if (effect.type === 'displacement') {
                     const targetKeys = getPlayersByTarget(effect.target);
@@ -720,7 +721,7 @@ export const apexNebulaMachine = createMachine({
                             // For Ion Storm (Hazard), let's assume random adjacent for now or logical shift
                             // Real displacement logic would push away from a center or something.
                             // Simplified: move to a random adjacent hex if free or just displace.
-                            console.log(`Displacing ${p.playerPublicKey} by ${amount} units`);
+                            logger.action('Displacement', { playerPublicKey: p.playerPublicKey, amount });
                             // For simplicity, we'll just log this as it requires a physics-like push on hex grid
                         }
                         return p;
@@ -755,7 +756,7 @@ export const apexNebulaMachine = createMachine({
 
                 // Special Map Shifts
                 if (event.effects.global.type === 'map_shift') {
-                    console.log('MAP SHIFT EVENT:', event.effects.global.details?.action);
+                    logger.machine('MAP SHIFT', event.effects.global.details?.action);
                     // Implement Core Drift: Move Singularity
                     if (event.effects.global.details?.action === 'move_singularity_toward') {
                         const targetPlayerPublicKeys = getPlayersByTarget(event.effects.global.target);
@@ -765,7 +766,7 @@ export const apexNebulaMachine = createMachine({
                             const singularity = newHexGrid.find(h => h.type === 'Singularity');
                             if (singularity && targetHex) {
                                 // Simplified: move singularity 1 step toward player
-                                console.log(`Moving Singularity toward ${targetPlayerPublicKeys[0]}`);
+                                logger.machine('Singularity shift', { toward: targetPlayerPublicKeys[0] });
                             }
                         }
                     }
@@ -781,7 +782,7 @@ export const apexNebulaMachine = createMachine({
                     const success = fitness >= thresholdValue;
 
                     eventResults[genome.playerPublicKey] = { roll, modifier, success };
-                    console.log(`Player ${genome.playerPublicKey}: Roll=${roll}(${modifier}), Fitness=${fitness}, Success=${success}`);
+                    logger.machine('Event roll', { player: genome.playerPublicKey, roll, modifier, fitness, success });
 
                     if (success && event.effects.onSuccess) {
                         if (['transfer', 'displacement'].includes(event.effects.onSuccess.type)) {
@@ -795,7 +796,7 @@ export const apexNebulaMachine = createMachine({
                         } else {
                             const targets = getPlayersByTarget(event.effects.onSuccess.target);
                             if (targets.includes(genome.playerPublicKey)) {
-                                console.log(`Applying SUCCESS effect to ${genome.playerPublicKey}`);
+                                logger.machine('Effect application (Success)', { player: genome.playerPublicKey });
                                 return applyEffect(genome, event.effects.onSuccess);
                             }
                         }
@@ -807,7 +808,7 @@ export const apexNebulaMachine = createMachine({
                         } else {
                             const targets = getPlayersByTarget(event.effects.onFailure.target);
                             if (targets.includes(genome.playerPublicKey)) {
-                                console.log(`Applying FAILURE effect to ${genome.playerPublicKey}`);
+                                logger.machine('Effect application (Failure)', { player: genome.playerPublicKey });
                                 return applyEffect(genome, event.effects.onFailure);
                             }
                         }
@@ -848,10 +849,10 @@ export const apexNebulaMachine = createMachine({
 
         confirmPhase: assign(({ context, event }) => {
             if (event.type !== 'CONFIRM_PHASE') return {};
-            console.log('Action: confirmPhase', event.playerPublicKey, 'Current confirmed:', context.confirmedPlayers);
+            logger.action('confirmPhase', { playerPublicKey: event.playerPublicKey, currentConfirmed: context.confirmedPlayers });
             if (context.confirmedPlayers.includes(event.playerPublicKey)) return {};
             const newConfirmed = [...context.confirmedPlayers, event.playerPublicKey];
-            console.log('New confirmed list:', newConfirmed);
+            logger.machine('Confirmed list updated', newConfirmed);
 
             // Deduct matter immediately upon confirming (skip if in setup phase, as cost doesn't apply)
             const playerGenome = context.genomes.find(g => g.playerPublicKey === event.playerPublicKey);
@@ -977,12 +978,12 @@ export const apexNebulaMachine = createMachine({
         allConfirmedAndWin: ({ context }) => {
             const isConfirmed = context.confirmedPlayers.length === context.players.length;
             const hasWinner = context.genomes.some(g => checkWinCondition(g));
-            console.log('Guard: allConfirmedAndWin', isConfirmed && hasWinner, 'Confirmed:', isConfirmed, 'Winner:', hasWinner);
+            logger.machine('Guard: allConfirmedAndWin', { result: isConfirmed && hasWinner, isConfirmed, hasWinner });
             return isConfirmed && hasWinner;
         },
         allPlayersConfirmed: ({ context }) => {
             const isConfirmed = context.confirmedPlayers.length === context.players.length;
-            console.log('Guard: allPlayersConfirmed', isConfirmed, 'Confirmed:', context.confirmedPlayers.length, 'Total:', context.players.length);
+            logger.machine('Guard: allPlayersConfirmed', { result: isConfirmed, count: context.confirmedPlayers.length, total: context.players.length });
             return isConfirmed;
         },
         allPlayersReady: ({ context }) => {
@@ -1000,7 +1001,7 @@ export const apexNebulaMachine = createMachine({
             // 1. Check if it's the player's turn
             const activePlayerPublicKey = context.turnOrder[context.currentPlayerIndex];
             if (event.playerPublicKey !== activePlayerPublicKey) {
-                console.log(`Guard: canMove failed - not ${event.playerPublicKey}'s turn. Active: ${activePlayerPublicKey}`);
+                logger.machine('Guard failed: canMove (not turn)', { player: event.playerPublicKey, active: activePlayerPublicKey });
                 return false;
             }
 
@@ -1010,20 +1011,20 @@ export const apexNebulaMachine = createMachine({
             const currentHex = context.hexGrid.find(h => h.id === piece?.hexId);
 
             if (!genome || !piece || !targetHex || !currentHex) {
-                console.log(`Guard: canMove failed - missing data: genome=${!!genome}, piece=${!!piece}, targetHex=${!!targetHex}, currentHex=${!!currentHex}`);
+                logger.machine('Guard failed: canMove (missing data)', { genome: !!genome, piece: !!piece, targetHex: !!targetHex, currentHex: !!currentHex });
                 return false;
             }
 
             // 2. Adjacency check (Distance must be 1)
             const d = getHexDistance(currentHex.x, currentHex.y, targetHex.x, targetHex.y);
             if (d !== 1) {
-                console.log(`Guard: canMove failed - distance ${d} is not 1. From ${currentHex.id} to ${targetHex.id}`);
+                logger.machine('Guard failed: canMove (distance)', { distance: d, from: currentHex.id, to: targetHex.id });
                 return false;
             }
 
             // 3. Singularity specific check: must have at least 10 Data Clusters to enter
             if (targetHex.type === 'Singularity' && genome.dataClusters < 10) {
-                console.log(`Guard: canMove failed - Singularity requires 10 Data Clusters. Has: ${genome.dataClusters}`);
+                logger.machine('Guard failed: canMove (singularity)', { clusters: genome.dataClusters });
                 return false;
             }
 
@@ -1034,7 +1035,7 @@ export const apexNebulaMachine = createMachine({
             const moveCost = isDoubleAward ? 2 : 1;
 
             if (actions.movesMade + moveCost > nav) {
-                console.log(`Guard: canMove failed - not enough NAV. Moves made: ${actions.movesMade}, Cost: ${moveCost}, NAV: ${nav}`);
+                logger.machine('Guard failed: canMove (NAV)', { movesMade: actions.movesMade, cost: moveCost, nav });
                 return false;
             }
 

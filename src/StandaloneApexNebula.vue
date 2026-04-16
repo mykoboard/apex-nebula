@@ -5,6 +5,7 @@ import type { PlayerInfo, SimpleConnection } from '@mykoboard/integration';
 import { createLocalWebRTCPair, createGameMessage } from '@mykoboard/integration';
 import { INITIAL_EVENT_DECK } from './eventUtils';
 import { ChevronDown } from 'lucide-vue-next';
+import { logger } from './lib/logger';
 
 const mockPlayers: PlayerInfo[] = [
   { publicKey: 'player1', id: 'player1', name: 'Alpha AI', status: 'game', isConnected: true, isLocal: true, isHost: true },
@@ -19,13 +20,13 @@ const restartKey = ref(0);
 
 const handleReset = () => {
   restartKey.value++;
-  console.log('[Standalone] Resetting simulator state...');
+  logger.info('Resetting simulator state');
 };
 
 onMounted(async () => {
-  console.log('[Standalone] Initializing WebRTC pair...');
+  logger.net('Initializing WebRTC pair');
   const [connA, connB] = await createLocalWebRTCPair();
-  console.log('[Standalone] WebRTC pair ready. connA ID:', connA.id);
+  logger.net('WebRTC pair ready', { connA: connA.id });
   
   mockConnections.value = [connA];
   remoteProxy = connB;
@@ -34,27 +35,27 @@ onMounted(async () => {
     const msg = JSON.parse(data);
     // Ignore frequent SYNC_STATE logs to keep console clean, only log other types
     if (msg.type !== 'SYNC_STATE') {
-      console.log('[Standalone] Remote received from game:', msg);
+      logger.net('Remote received from game', msg);
     }
   });
 });
 
 const handleAddLedger = (action: { type: string; payload: any }) => {
-  console.log('Add to ledger:', action);
+  logger.ledger('Add block', action);
 };
 
 const handleFinishGame = () => {
-  console.log('Game finished');
+  logger.info('Game finished');
   alert('Game finished! In production, this would return to lobby.');
 };
 
 const sendDebugMessage = (type: string, payload: any) => {
   if (!remoteProxy) {
-    console.error('[Standalone] Cannot send message: remoteProxy not initialized');
+    logger.error('Cannot send message', 'remoteProxy not initialized');
     return;
   }
   const message = createGameMessage(type, payload);
-  console.log(`[Standalone] Simulating ${type} from remote:`, message);
+  logger.net('Simulating remote message', { type, message });
   remoteProxy.send(JSON.stringify(message));
 };
 
@@ -72,7 +73,7 @@ const forceBetaAIDistribution = async () => {
   if (isProcessing.value) return;
   isProcessing.value = true;
   try {
-    console.log('[Standalone] Forcing Beta AI Distribution & Ready...');
+    logger.info('Forcing Beta AI Distribution & Ready');
     const dist = [1, 1, 1, 1];
     let remaining = 8;
     while (remaining > 0) {
@@ -116,7 +117,7 @@ const forceAlphaAIDistribution = async () => {
   if (isProcessing.value) return;
   isProcessing.value = true;
   try {
-    console.log('[Standalone] Forcing Alpha AI Distribution & Ready...');
+    logger.info('Forcing Alpha AI Distribution & Ready');
     const attrs: any[] = ['NAV', 'LOG', 'DEF', 'SCN'];
     for (const attr of attrs) {
       sendDebugMessage('DISTRIBUTE_CUBES', {
