@@ -369,6 +369,34 @@ watch(
   { immediate: true }
 );
 
+const effectiveGenome = computed(() => {
+  if (!localGenome.value) return null;
+  if (!pendingGenome.value || (!isSetup.value && !isOptimization.value)) {
+    return localGenome.value;
+  }
+  
+  // Delta-based merging:
+  // We want to preserve any "pended" changes on top of the live machine state.
+  // This ensures that authoritative changes (like gaining cubes or pruning) 
+  // are reflected immediately in the UI.
+  const machineAttrs = localGenome.value.baseAttributes;
+  const pendingAttrs = pendingGenome.value.baseAttributes;
+  const mergedAttrs = { ...machineAttrs };
+  let cubesPended = 0;
+  
+  for (const attr in machineAttrs) {
+    const delta = (pendingAttrs[attr] || 0) - (machineAttrs[attr] || 0);
+    mergedAttrs[attr as keyof typeof mergedAttrs] = machineAttrs[attr] + delta;
+    cubesPended += delta;
+  }
+  
+  return {
+    ...localGenome.value,
+    baseAttributes: mergedAttrs,
+    cubePool: localGenome.value.cubePool - cubesPended
+  };
+});
+
 </script>
 
 <template>
@@ -453,7 +481,7 @@ watch(
             <CommandProtocol
               :state="state"
               :local-player="localPlayer"
-              :local-genome="pendingGenome || localGenome"
+              :local-genome="effectiveGenome"
               :is-initiator="isInitiator"
               :current-player="currentPlayer"
               :is-local-player-turn="isLocalPlayerTurn"
@@ -470,7 +498,7 @@ watch(
             </h4>
             <PlayerConsole
               v-if="localGenome"
-              :genome="pendingGenome || localGenome"
+              :genome="effectiveGenome"
               :editable="(isSetup || isOptimization) && !confirmedLocal"
               :setup-limit="isSetup ? 10 : undefined"
               @distribute="(attr, amt) => {
