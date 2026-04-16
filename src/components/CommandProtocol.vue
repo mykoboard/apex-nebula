@@ -17,6 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'action', type: string, payload: any): void;
+  (e: 'open-event-popup'): void;
 }>();
 
 const handleAction = (type: string, payload: any) => emit('action', type, payload);
@@ -224,30 +225,19 @@ const isOptimization = computed(() => props.state.matches('optimizationPhase'));
           </div>
         </div>
       </div>
-
       <!-- Environmental Phase -->
       <div v-if="isEnvironmental" class="space-y-4">
-
-        <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
-          <template v-for="(res, pid) in state.context.lastEventResults" :key="pid">
-            <div class="p-2 rounded-lg border flex items-center justify-between font-black text-[9px] uppercase tracking-tight" :class="res.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'">
-              <span class="truncate max-w-[80px]">{{ state.context.players.find((pl: Player) => pl.publicKey === pid)?.name }}</span>
-              <div class="flex items-center gap-1.5">
-                <Dice6 class="w-3 h-3 opacity-50" />
-                <span>{{ res.roll }}</span>
-                <span class="opacity-50 text-[7px]">({{ res.modifier >= 0 ? '+' : '' }}{{ res.modifier }})</span>
-              </div>
-            </div>
-          </template>
-        </div>
+        <p class="text-[10px] text-slate-400 italic">
+          Active environmental protocol requires system acknowledgement.
+        </p>
         <button
-          v-if="isInitiator"
-          @click="handleAction('NEXT_PHASE', {})"
-          class="w-full h-10 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-orange-500/10"
+          @click="$emit('open-event-popup')"
+          class="w-full h-10 rounded-xl bg-orange-600/20 hover:bg-orange-600/40 text-orange-400 font-black text-[10px] uppercase tracking-widest border border-orange-500/20 transition-all active:scale-95"
         >
-          Resolve Event Protocol
+          {{ confirmedLocal ? 'Syncing Acknowledgment' : 'Review Active Protocol' }}
         </button>
       </div>
+
 
       <!-- Competitive Phase -->
       <button

@@ -162,15 +162,27 @@ export const apexNebulaMachine = createMachine({
         },
         environmentalPhase: {
             entry: [
-                assign({ gamePhase: 'environmental' }),
+                assign({ 
+                    gamePhase: 'environmental' as const,
+                    confirmedPlayers: [] as string[]
+                }),
                 'drawEnvironmentalEvent',
+                'evaluateEnvironmentalFitness', // Resolve immediately so results can be shown
             ],
             on: {
+                CONFIRM_PHASE: {
+                    actions: 'confirmPhase',
+                },
                 NEXT_PHASE: {
                     target: 'competitivePhase',
-                    actions: 'evaluateEnvironmentalFitness',
                 },
             },
+            always: [
+                {
+                    target: 'competitivePhase',
+                    guard: 'allPlayersConfirmed',
+                }
+            ]
         },
         competitivePhase: {
             entry: assign({ gamePhase: 'competitive' }),

@@ -16,7 +16,7 @@ import CommandProtocol from './components/CommandProtocol.vue';
 import SingularityWonScreen from './components/SingularityWonScreen.vue';
 import { logger } from './lib/logger';
 
-import { Dna, Crown } from 'lucide-vue-next';
+import { Dna, Crown, AlertTriangle } from 'lucide-vue-next';
 
 const props = defineProps<GameProps>();
 
@@ -397,6 +397,11 @@ const effectiveGenome = computed(() => {
   };
 });
 
+const showEventPopup = ref(false);
+watch(isEnvironmental, (val) => {
+  if (val) showEventPopup.value = true;
+});
+
 </script>
 
 <template>
@@ -410,6 +415,64 @@ const effectiveGenome = computed(() => {
       @action="handleAction"
       @exit="onFinishGame"
     />
+
+    <!-- Environmental Event Modal -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+      >
+        <div v-if="showEventPopup && isEnvironmental" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" @click="showEventPopup = false" />
+          
+          <div class="relative w-full max-w-lg bg-slate-900 border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent pointer-events-none" />
+            
+            <div class="p-8 space-y-6">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 bg-orange-500/20 rounded-xl border border-orange-500/30">
+                    <AlertTriangle class="w-5 h-5 text-orange-400" />
+                  </div>
+                  <div>
+                    <h2 class="text-xl font-black text-white uppercase tracking-tight">Environmental Protocol</h2>
+                    <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Active System Hazard</p>
+                  </div>
+                </div>
+              </div>
+
+              <EventCard 
+                :event="state.context.currentEvent" 
+                :results="state.context.lastEventResults"
+                :local-player-id="localPlayer?.publicKey"
+              />
+
+              <div class="flex flex-col gap-3 pt-2">
+                <button
+                  @click="handleAction('CONFIRM_PHASE', { playerPublicKey: localPlayer?.publicKey })"
+                  :disabled="confirmedLocal"
+                  class="w-full h-12 bg-orange-600 hover:bg-orange-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-black uppercase tracking-[0.2em] text-xs rounded-2xl transition-all shadow-lg active:scale-95 disabled:active:scale-100"
+                >
+                  <span v-if="confirmedLocal" class="flex items-center justify-center gap-2">
+                    <div class="w-1 h-3 bg-emerald-500 rounded-full animate-pulse" />
+                    Waiting for Peer Confirmation
+                  </span>
+                  <span v-else>Acknowledge Protocol</span>
+                </button>
+                
+                <p v-if="confirmedLocal" class="text-center text-[9px] font-black text-slate-500 uppercase tracking-widest animate-pulse">
+                   Synchronizing State with Nebula...
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <template v-else>
       <div class="flex justify-between items-center relative z-10">
@@ -486,6 +549,7 @@ const effectiveGenome = computed(() => {
               :current-player="currentPlayer"
               :is-local-player-turn="isLocalPlayerTurn"
               @action="handleAction"
+              @open-event-popup="showEventPopup = true"
             />
           </div>
 

@@ -140,5 +140,40 @@ const typeColors: Record<string, string> = {
         <span class="truncate">{{ getEffectDescription(event.effects.onFailure) }}</span>
       </div>
     </div>
+
+    <!-- Results Section -->
+    <div v-if="results && Object.keys(results).length > 0" class="mt-4 pt-4 border-t border-white/5 space-y-2">
+      <h4 class="text-[8px] font-black text-slate-500 uppercase tracking-widest px-1 mb-1">Execution Results</h4>
+      <div 
+        v-for="(result, pKey) in results" 
+        :key="pKey" 
+        class="flex items-center justify-between p-2 rounded-lg bg-black/20 border border-white/5"
+      >
+        <div class="flex items-center gap-2">
+          <div class="w-1.5 h-1.5 rounded-full" :class="result.success ? 'bg-emerald-500' : 'bg-red-500'" />
+          <span class="text-[9px] font-black uppercase text-slate-300">
+            {{ pKey === localPlayerId ? 'Your System' : `Remote (${String(pKey).slice(0, 4)})` }}
+          </span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex flex-col items-end">
+            <span class="text-[7px] font-black text-slate-500 uppercase leading-none mb-0.5">Roll</span>
+            <span class="text-[10px] font-black text-white leading-none">{{ result.roll }}</span>
+          </div>
+          <div v-if="result.modifier !== 0" class="flex flex-col items-end">
+            <span class="text-[7px] font-black text-slate-500 uppercase leading-none mb-0.5">Mod</span>
+            <span class="text-[10px] font-black leading-none" :class="result.modifier > 0 ? 'text-emerald-400' : 'text-red-400'">
+              {{ result.modifier > 0 ? '+' : '' }}{{ result.modifier }}
+            </span>
+          </div>
+          <div 
+            class="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider min-w-[50px] text-center"
+            :class="result.success ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'"
+          >
+            {{ result.success ? 'Pass' : 'Fail' }}
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
