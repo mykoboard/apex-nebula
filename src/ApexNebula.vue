@@ -357,8 +357,13 @@ watch(
     }
 
     // Sync on phase transition to ensure we start from the machine's truth
+    // But only for phases that require "sandboxing" (setup/optimization)
     if (phase !== prevPhase) {
-      pendingGenome.value = JSON.parse(JSON.stringify(genome));
+      if (phase === 'setup' || phase === 'optimization') {
+        pendingGenome.value = JSON.parse(JSON.stringify(genome));
+      } else {
+        pendingGenome.value = null;
+      }
     }
   },
   { immediate: true }
