@@ -273,12 +273,12 @@ const handleAction = (actionType: string, payload: any) => {
 
   // If confirming phase, batch up any pending cube distributions first
   if (actionType === 'CONFIRM_PHASE' && payload.playerPublicKey === lpKey) {
-    if (pendingGenome.value && localGenome.value) {
+    if (localGenome.value) {
       const distributions = [];
       const attrs = ['NAV', 'LOG', 'DEF', 'SCN'] as const;
       
       for (const attr of attrs) {
-        const delta = (pendingGenome.value.baseAttributes[attr] || 0) - (localGenome.value.baseAttributes[attr] || 0);
+        const delta = pendingDeltas.value[attr] || 0;
         if (delta !== 0) {
           distributions.push({ attribute: attr, amount: delta });
         }
@@ -304,6 +304,11 @@ const handleAction = (actionType: string, payload: any) => {
 
   // 1. Process locally
   send({ type: actionType as any, ...payload });
+
+  // Reset deltas if we just confirmed phase (which already sent the distributions above)
+  if (actionType === 'CONFIRM_PHASE' && payload.playerPublicKey === lpKey) {
+    pendingDeltas.value = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
+  }
 
   // 2. Broadcast to all peers
   const message = createGameMessage(actionType, payload);
@@ -345,27 +350,15 @@ const localMaxDistance = computed(() => {
     return nav > movesMade ? 1 : 0;
 });
 
-// Local state for pending cube distributions (unconfirmed)
-const pendingGenome = ref<any>(null);
+// Local state for pending cube distributions (deltas from machine state)
+const pendingDeltas = ref<Record<AttributeType, number>>({ NAV: 0, LOG: 0, DEF: 0, SCN: 0 });
 
-// Reset pending genome when phase changes to setup/optimization or when localGenome becomes available
+// Reset pending deltas when phase changes
 watch(
-  () => [state.value.context.gamePhase, localGenome.value] as const,
-  ([phase, genome], [prevPhase] = []) => {
-    // Reset pending genome to current machine state if not already set
-    // This allows us to start from the authoritative state
-    if (!pendingGenome.value && genome) {
-      pendingGenome.value = JSON.parse(JSON.stringify(genome));
-    }
-
-    // Sync on phase transition to ensure we start from the machine's truth
-    // But only for phases that require "sandboxing" (setup/optimization)
+  () => state.value.context.gamePhase,
+  (phase, prevPhase) => {
     if (phase !== prevPhase) {
-      if (phase === 'setup' || phase === 'optimization') {
-        pendingGenome.value = JSON.parse(JSON.stringify(genome));
-      } else {
-        pendingGenome.value = null;
-      }
+      pendingDeltas.value = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
     }
   },
   { immediate: true }
@@ -373,22 +366,17 @@ watch(
 
 const effectiveGenome = computed(() => {
   if (!localGenome.value) return null;
-  if (!pendingGenome.value || (!isSetup.value && !isOptimization.value)) {
+  if (!isSetup.value && !isOptimization.value) {
     return localGenome.value;
   }
   
-  // Delta-based merging:
-  // We want to preserve any "pended" changes on top of the live machine state.
-  // This ensures that authoritative changes (like gaining cubes or pruning) 
-  // are reflected immediately in the UI.
   const machineAttrs = localGenome.value.baseAttributes;
-  const pendingAttrs = pendingGenome.value.baseAttributes;
   const mergedAttrs = { ...machineAttrs };
   let cubesPended = 0;
   
   for (const attr in machineAttrs) {
-    const delta = (pendingAttrs[attr] || 0) - (machineAttrs[attr] || 0);
-    mergedAttrs[attr as keyof typeof mergedAttrs] = machineAttrs[attr] + delta;
+    const delta = pendingDeltas.value[attr as AttributeType] || 0;
+    mergedAttrs[attr as keyof typeof mergedAttrs] = machineAttrs[attr as AttributeType] + delta;
     cubesPended += delta;
   }
   
@@ -567,13 +555,12 @@ watch(isEnvironmental, (val) => {
               @distribute="(attr, amt) => {
                 if (amt < 0 && isOptimization) {
                   handleAction('PRUNE_ATTRIBUTE', { playerPublicKey: localPlayer?.publicKey, attribute: attr });
-                } else if (pendingGenome) {
-                  // Only update locally, don't trigger network action
-                  const currentPool = pendingGenome.cubePool;
-                  if (amt > 0 && currentPool < amt) return;
+                } else {
+                  // Use effective pool which accounts for live machine state + local pending changes
+                  const availablePool = effectiveGenome?.cubePool ?? 0;
+                  if (amt > 0 && availablePool < amt) return;
                   
-                  pendingGenome.baseAttributes[attr] = (pendingGenome.baseAttributes[attr] || 0) + amt;
-                  pendingGenome.cubePool -= amt;
+                  pendingDeltas[attr] = (pendingDeltas[attr] || 0) + amt;
                 }
               }"
             />
