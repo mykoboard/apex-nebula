@@ -107,6 +107,8 @@ const isLocalPlayerTurn = computed(() => !!(localPlayer.value && activePlayerPub
 const isWaiting = computed(() => state.value.matches('waitingForPlayers'));
 const isSetup = computed(() => state.value.matches('setupPhase'));
 const isOptimization = computed(() => state.value.matches('optimizationPhase'));
+const isEnvironmental = computed(() => state.value.matches('environmentalPhase'));
+const isPhenotype = computed(() => state.value.matches('phenotypePhase'));
 
 const otherPlayers = computed(() => state.value.context.players.filter((p: Player) => p.publicKey !== localPlayer.value?.publicKey));
 
@@ -408,14 +410,6 @@ watch(isEnvironmental, (val) => {
   <div class="min-h-screen p-8 flex flex-col space-y-12 bg-[#020617] text-slate-100 border-0 rounded-none overflow-x-hidden relative">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(168,85,247,0.1),transparent)] pointer-events-none" />
 
-    <!-- Won Screen -->
-    <SingularityWonScreen
-      v-if="state.matches('won')"
-      :winner-names="winnerNames"
-      @action="handleAction"
-      @exit="onFinishGame"
-    />
-
     <!-- Environmental Event Modal -->
     <Teleport to="body">
       <Transition
@@ -474,7 +468,12 @@ watch(isEnvironmental, (val) => {
       </Transition>
     </Teleport>
 
-    <template v-else>
+    <SingularityWonScreen
+      v-if="state.matches('won')"
+      :winner-names="winnerNames"
+      @action="handleAction"
+      @exit="onFinishGame"
+    /><template v-else>
       <div class="flex justify-between items-center relative z-10">
         <div class="flex flex-col">
           <div class="flex items-center gap-4">
