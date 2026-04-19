@@ -239,15 +239,6 @@ const isOptimization = computed(() => props.state.matches('optimizationPhase'));
       </div>
 
 
-      <!-- Competitive Phase -->
-      <button
-        v-if="isCompetitive && isInitiator"
-
-        @click="handleAction('NEXT_PHASE', {})"
-        class="w-full h-12 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-[10px] uppercase tracking-[0.2em]"
-      >
-        Resolve Competitive
-      </button>
 
       <!-- Optimization Phase -->
       <div v-if="isOptimization" class="space-y-4">

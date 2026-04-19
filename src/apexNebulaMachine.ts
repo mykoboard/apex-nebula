@@ -174,18 +174,21 @@ export const apexNebulaMachine = createMachine({
                     actions: 'confirmPhase',
                 },
                 NEXT_PHASE: {
-                    target: 'competitivePhase',
+                    target: 'optimizationPhase',
                 },
             },
             always: [
                 {
-                    target: 'competitivePhase',
+                    target: 'optimizationPhase',
                     guard: 'allPlayersConfirmed',
                 }
             ]
         },
         competitivePhase: {
             entry: assign({ gamePhase: 'competitive' }),
+            always: {
+                target: 'optimizationPhase',
+            },
             on: {
                 HUSTLE: {
                     actions: 'resolveHustle',

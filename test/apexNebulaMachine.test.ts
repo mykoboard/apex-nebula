@@ -547,7 +547,7 @@ describe('apexNebulaMachine', () => {
             actor.stop();
         });
 
-        test('NEXT_PHASE transitions to competitivePhase', () => {
+        test('NEXT_PHASE transitions to optimizationPhase', () => {
             const actor = createStartedGame();
             advanceToPhenotype(actor);
 
@@ -557,7 +557,7 @@ describe('apexNebulaMachine', () => {
 
             actor.send({ type: 'NEXT_PHASE' });
 
-            expect(actor.getSnapshot().value).toBe('competitivePhase');
+            expect(actor.getSnapshot().value).toBe('optimizationPhase');
             actor.stop();
         });
 
@@ -581,17 +581,16 @@ describe('apexNebulaMachine', () => {
         function advanceToCompetitive(actor: ReturnType<typeof createActor<typeof apexNebulaMachine>>) {
             advanceToPhenotype(actor);
             const ctx = actor.getSnapshot().context;
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[0] });
-            actor.send({ type: 'FINISH_TURN', playerId: ctx.turnOrder[1] });
-            actor.send({ type: 'NEXT_PHASE' }); // env → competitive
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
+            actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
+            // env → optimization (competitive is skipped)
+            actor.send({ type: 'NEXT_PHASE' });
         }
 
-        test('NEXT_PHASE transitions to optimizationPhase', () => {
+        test('always transitions to optimizationPhase immediately', () => {
             const actor = createStartedGame();
             advanceToCompetitive(actor);
 
-            expect(actor.getSnapshot().value).toBe('competitivePhase');
-            actor.send({ type: 'NEXT_PHASE' });
             expect(actor.getSnapshot().value).toBe('optimizationPhase');
             actor.stop();
         });
@@ -605,8 +604,7 @@ describe('apexNebulaMachine', () => {
             const ctx = actor.getSnapshot().context;
             actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
             actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
-            actor.send({ type: 'NEXT_PHASE' }); // env → competitive
-            actor.send({ type: 'NEXT_PHASE' }); // competitive → optimization
+            actor.send({ type: 'NEXT_PHASE' }); // env → optimization
         }
 
         test('PRUNE_ATTRIBUTE decreases attribute by 1 and gives 2 matter', () => {
@@ -648,8 +646,6 @@ describe('apexNebulaMachine', () => {
             actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
             actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
             actor.send({ type: 'NEXT_PHASE' });
-            actor.send({ type: 'NEXT_PHASE' });
-
             expect(actor.getSnapshot().value).toBe('optimizationPhase');
 
             // NAV should be 1 — pruning should be blocked
@@ -753,11 +749,7 @@ describe('apexNebulaMachine', () => {
             actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
             expect(actor.getSnapshot().value).toBe('environmentalPhase');
 
-            // Environmental
-            actor.send({ type: 'NEXT_PHASE' });
-            expect(actor.getSnapshot().value).toBe('competitivePhase');
-
-            // Competitive
+            // Environmental → Optimization (Competitive skipped)
             actor.send({ type: 'NEXT_PHASE' });
             expect(actor.getSnapshot().value).toBe('optimizationPhase');
 
@@ -783,7 +775,6 @@ describe('apexNebulaMachine', () => {
             const ctx = actor.getSnapshot().context;
             actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[0] });
             actor.send({ type: 'FINISH_TURN', playerPublicKey: ctx.turnOrder[1] });
-            actor.send({ type: 'NEXT_PHASE' });
             actor.send({ type: 'NEXT_PHASE' });
             actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p1' });
             actor.send({ type: 'CONFIRM_PHASE', playerPublicKey: 'p2' });
@@ -952,8 +943,6 @@ describe('apexNebulaMachine', () => {
             );
 
             // Advance to optimization
-            host.send({ type: 'NEXT_PHASE' });
-            guest.send({ type: 'NEXT_PHASE' });
             host.send({ type: 'NEXT_PHASE' });
             guest.send({ type: 'NEXT_PHASE' });
 
