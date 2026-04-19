@@ -122,62 +122,62 @@ const gridWithData = computed(() => {
         <text
           v-if="!hex.isHome"
           :x="hex.posX"
-          :y="hex.posY - 28"
+          :y="hex.posY - 32"
           text-anchor="middle"
           :style="{ fill: hex.color }"
-          class="text-[8px] font-black uppercase tracking-widest pointer-events-none select-none"
+          class="text-[9px] font-black uppercase tracking-widest pointer-events-none select-none drop-shadow-md"
         >
           <tspan
             v-for="(word, idx) in hex.type.split(/(?=[A-Z])/)"
             :key="idx"
             :x="hex.posX"
-            :dy="idx === 0 ? 0 : 8"
+            :dy="idx === 0 ? 0 : 10"
           >
             {{ word }}
           </tspan>
         </text>
 
-        <!-- Resource Icons -->
-        <g v-if="!hex.isHome" :transform="`translate(${hex.posX}, ${hex.posY})`">
-          <g v-if="hex.yield.matter > 0" transform="translate(-32, 0)">
-            <rect x="-8" y="-8" width="16" height="16" rx="2" class="fill-amber-500/80" />
+        <!-- Threshold & Attribute (Centered) -->
+        <g v-if="!hex.isHome" :transform="`translate(${hex.posX - 40}, ${hex.posY - 12})`">
+          <foreignObject width="80" height="40" class="overflow-visible">
+            <div class="flex items-center justify-center gap-2 w-full h-full">
+              <span v-if="hex.threshold > 0" class="text-[20px] font-black text-white leading-none drop-shadow-lg">
+                {{ hex.threshold }}
+              </span>
+              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center bg-black/80 px-2.5 py-1.5 rounded-lg border border-white/20 backdrop-blur-md shadow-xl">
+                <template v-if="Array.isArray(hex.targetAttribute)">
+                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="14" class="text-white drop-shadow-md" />
+                </template>
+                <AttributeIcon v-else :type="hex.targetAttribute" size="16" class="text-white drop-shadow-md" />
+              </div>
+            </div>
+          </foreignObject>
+        </g>
+
+        <!-- Resource Icons (Bottom) -->
+        <g v-if="!hex.isHome" :transform="`translate(${hex.posX}, ${hex.posY + 26})`">
+          <g v-if="hex.yield.matter > 0" :transform="hex.yield.data > 0 ? 'translate(-14, 0)' : 'translate(0, 0)'">
+            <rect x="-10" y="-10" width="20" height="20" rx="4" fill="#f59e0b" stroke="#fcd34d" stroke-width="1.5" class="drop-shadow-md" />
             <text
               x="0"
-              y="2"
+              y="4"
               text-anchor="middle"
-              class="text-[12px] font-black fill-slate-900 pointer-events-none select-none"
+              class="text-[13px] font-black fill-amber-950 pointer-events-none select-none"
             >
               {{ hex.yield.matter }}
             </text>
           </g>
-          <g v-if="hex.yield.data > 0" transform="translate(32, 0)">
-            <circle r="8" class="fill-cyan-500/80" />
+          <g v-if="hex.yield.data > 0" :transform="hex.yield.matter > 0 ? 'translate(14, 0)' : 'translate(0, 0)'">
+            <circle r="10" fill="#06b6d4" stroke="#67e8f9" stroke-width="1.5" class="drop-shadow-md" />
             <text
               x="0"
-              y="2"
+              y="4"
               text-anchor="middle"
-              class="text-[12px] font-black fill-slate-900 pointer-events-none select-none"
+              class="text-[13px] font-black fill-cyan-950 pointer-events-none select-none"
             >
               {{ hex.yield.data }}
             </text>
           </g>
-        </g>
-
-        <!-- Threshold & Attribute -->
-        <g v-if="!hex.isHome" :transform="`translate(${hex.posX - 25}, ${hex.posY + 12})`">
-          <foreignObject width="50" height="30">
-            <div class="flex flex-col items-center justify-center w-full h-full">
-              <span v-if="hex.threshold > 0" class="text-[14px] font-black text-white leading-none mb-1">
-                {{ hex.threshold }}
-              </span>
-              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center bg-black/60 px-2 py-1 rounded-lg border border-white/10 backdrop-blur-md shadow-lg">
-                <template v-if="Array.isArray(hex.targetAttribute)">
-                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="10" class="text-white drop-shadow-sm" />
-                </template>
-                <AttributeIcon v-else :type="hex.targetAttribute" size="12" class="text-white drop-shadow-sm" />
-              </div>
-            </div>
-          </foreignObject>
         </g>
 
         <!-- Piece Indicator -->
