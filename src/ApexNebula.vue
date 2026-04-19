@@ -550,6 +550,7 @@ watch(isEnvironmental, (val) => {
             <PlayerConsole
               v-if="localGenome"
               :genome="effectiveGenome"
+              :player-color="localPlayer?.color"
               :editable="(isSetup || isOptimization) && !confirmedLocal"
               :setup-limit="isSetup ? 10 : undefined"
               @distribute="(attr, amt) => {
@@ -596,7 +597,7 @@ watch(isEnvironmental, (val) => {
                 <Dna class="w-8 h-8 text-slate-600 mb-2" />
                 <span class="text-[10px] font-black tracking-widest text-slate-500 uppercase">Classified</span>
               </div>
-              <PlayerConsole v-else :genome="genome" />
+              <PlayerConsole v-else :genome="genome" :player-color="state.context.players.find(p => p.publicKey === genome.playerPublicKey)?.color" />
             </div>
           </template>
         </div>

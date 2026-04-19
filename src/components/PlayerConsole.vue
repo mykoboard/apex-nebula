@@ -9,9 +9,17 @@ interface Props {
   genome: PlayerGenome;
   editable?: boolean;
   setupLimit?: number;
+  playerColor?: string;
 }
 
 const props = defineProps<Props>();
+
+const colorClasses: Record<string, string> = {
+  red: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]',
+  green: 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]',
+  blue: 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]',
+  yellow: 'bg-yellow-500 shadow-[0_0_10px_rgba(250,204,21,0.5)]',
+};
 
 const emit = defineEmits<{
   (e: 'distribute', attribute: AttributeType, amount: number): void;
@@ -83,6 +91,7 @@ const getSlotClass = (attrType: AttributeType, i: number, colorClass: string) =>
         <h3 class="text-xl font-black text-white tracking-widest uppercase flex items-center gap-2">
           <Box class="w-6 h-6 text-indigo-400" />
           Genome Console
+          <div v-if="playerColor" :class="['w-3 h-3 rounded-full border border-white/20 ml-2', colorClasses[playerColor]]" />
         </h3>
         <!-- Stability Track -->
         <div class="flex items-center gap-2 mt-1">
