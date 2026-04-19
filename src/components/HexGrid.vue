@@ -115,8 +115,7 @@ const gridWithData = computed(() => {
           ]"
         />
 
-        <!-- Hex Center Point & Labels -->
-        <circle v-if="!hex.isHome" :cx="hex.posX" :cy="hex.posY" r="2" :style="{ fill: hex.color }" />
+        <!-- Hex Labels -->
 
         <!-- Hex Name/Type -->
         <text
