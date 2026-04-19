@@ -114,7 +114,7 @@ import uiGuide from './assets/ui-guide.png';
             <li>Return to starting hex (Home Nebula).</li>
             <li>Attributes reset to 1.</li>
             <li>Stability resets to 3.</li>
-            <li>Cube Pool resets to 12.</li>
+            <li>Cube Pool resets to 8 + 50% of acquired cubes.</li>
             <li>Raw Matter is cleared to 0.</li>
             <li>Data Clusters reset to 1.</li>
           </ul>
@@ -125,12 +125,12 @@ import uiGuide from './assets/ui-guide.png';
       <section>
         <h3 class="text-xl font-bold text-primary mb-3">Player Interaction</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div class="bg-white/5 p-3 rounded-lg">
-            <h4 class="font-semibold text-white/90 mb-1">The Hustle</h4>
-            <p class="text-white/70">Competitive battle for resources. Winner takes 1 Resource or forces 1 Stability loss.</p>
+          <div class="bg-white/5 p-3 rounded-lg opacity-50">
+            <h4 class="font-semibold text-white/90 mb-1">The Hustle (Inactive)</h4>
+            <p class="text-white/70 italic">Competitive battle for resources. Currently auto-skipped in development.</p>
           </div>
-          <div class="bg-white/5 p-3 rounded-lg">
-            <h4 class="font-semibold text-white/90 mb-1">The Handshake</h4>
+          <div class="bg-white/5 p-3 rounded-lg opacity-50">
+            <h4 class="font-semibold text-white/90 mb-1">The Handshake (Coming Soon)</h4>
             <p class="text-white/70">Mutual trade of resources, or Horizontal Gene Transfer (swap permanent values of one attribute).</p>
           </div>
         </div>
@@ -153,7 +153,7 @@ import uiGuide from './assets/ui-guide.png';
           <ul class="space-y-4">
             <li class="flex flex-col gap-1">
               <strong class="text-white">1. Generation & Phase Sequence (Top):</strong>
-              <span class="text-white/70">Tracks the current epoch (1 to 5) and highlights the active phase (Mutation, Phenotype, Environmental, Competitive, or Optimization).</span>
+              <span class="text-white/70">Tracks the current epoch (1 to 5) and highlights the active phase (Mutation, Phenotype, Environmental, or Optimization).</span>
             </li>
             <li class="flex flex-col gap-1">
               <strong class="text-white">2. Event Deck & Protocol (Top/Middle):</strong>

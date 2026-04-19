@@ -1,5 +1,7 @@
 import { PlayerGenome, AttributeType } from './types.ts';
 
+import { INITIAL_TOTAL_CUBES } from './constants';
+
 // Helper: Calculate fitness score based on attributes
 export const calculateFitness = (genome: PlayerGenome, checkType: AttributeType | AttributeType[] | 'TOTAL_SUM' | 'NONE'): number => {
     if (checkType === 'NONE') return 0;
@@ -58,7 +60,7 @@ export const shuffleSeeded = <T>(array: T[], prng: () => number): T[] => {
 // Helper: Calculate Optimization Phase Maintenance Cost
 export const calculateMaintenanceCost = (genome: PlayerGenome): number => {
     const totalStats = Object.values(genome.baseAttributes).reduce((a, b) => a + b, 0);
-    return 1 + Math.max(0, Math.floor((totalStats - 12) / 2));
+    return 1 + Math.max(0, Math.floor((totalStats - INITIAL_TOTAL_CUBES) / 2));
 };
 
 // Helper: Get deterministic numeric offset from string (e.g. public key) for PRNG seeding

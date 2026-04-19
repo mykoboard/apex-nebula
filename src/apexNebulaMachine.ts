@@ -9,6 +9,7 @@ import { createHexGrid } from './gridUtils';
 import { INITIAL_EVENT_DECK } from './eventUtils';
 import { calculateFitness, checkWinCondition, createPRNG, rollSeededDice, getHexDistance, shuffleSeeded, calculateMaintenanceCost, getDeterministicOffset } from './utils';
 import { logger } from './lib/logger';
+import { INITIAL_TOTAL_CUBES, SETUP_POOL_SIZE, INITIAL_STABILITY, REBOOT_DATA_BONUS, INITIAL_ATTRIBUTE_VALUE } from './constants';
 
 const EMPTY_MODS = { NAV: 0, LOG: 0, DEF: 0, SCN: 0 };
 
@@ -664,11 +665,20 @@ export const apexNebulaMachine = createMachine({
                                 newPieces[pieceIdx] = { ...newPieces[pieceIdx], hexId: startHex };
                             }
 
-                            newGenome.stability = 3;
-                            newGenome.dataClusters = 1;
+                            const totalCubes = Object.values(genome.baseAttributes).reduce((sum: number, v: number) => sum + v, 0) + genome.cubePool;
+                            const acquiredCubes = Math.max(0, totalCubes - INITIAL_TOTAL_CUBES);
+                            const preserved = Math.floor(acquiredCubes / 2);
+
+                            newGenome.stability = INITIAL_STABILITY;
+                            newGenome.dataClusters = REBOOT_DATA_BONUS;
                             newGenome.rawMatter = 0;
-                            newGenome.baseAttributes = { NAV: 1, LOG: 1, DEF: 1, SCN: 1 };
-                            newGenome.cubePool = 8;
+                            newGenome.baseAttributes = { 
+                                NAV: INITIAL_ATTRIBUTE_VALUE, 
+                                LOG: INITIAL_ATTRIBUTE_VALUE, 
+                                DEF: INITIAL_ATTRIBUTE_VALUE, 
+                                SCN: INITIAL_ATTRIBUTE_VALUE 
+                            };
+                            newGenome.cubePool = SETUP_POOL_SIZE + preserved;
                         }
                         break;
                     case 'gain_insight':
@@ -688,11 +698,20 @@ export const apexNebulaMachine = createMachine({
                         newPieces[pIdx] = { ...newPieces[pIdx], hexId: startHex };
                     }
 
-                    result.stability = 3;
-                    result.dataClusters = 1;
+                    const totalCubes = Object.values(genome.baseAttributes).reduce((sum: number, v: number) => sum + v, 0) + genome.cubePool;
+                    const acquiredCubes = Math.max(0, totalCubes - INITIAL_TOTAL_CUBES);
+                    const preserved = Math.floor(acquiredCubes / 2);
+
+                    result.stability = INITIAL_STABILITY;
+                    result.dataClusters = REBOOT_DATA_BONUS;
                     result.rawMatter = 0;
-                    result.baseAttributes = { NAV: 1, LOG: 1, DEF: 1, SCN: 1 };
-                    result.cubePool = 8;
+                    result.baseAttributes = { 
+                        NAV: INITIAL_ATTRIBUTE_VALUE, 
+                        LOG: INITIAL_ATTRIBUTE_VALUE, 
+                        DEF: INITIAL_ATTRIBUTE_VALUE, 
+                        SCN: INITIAL_ATTRIBUTE_VALUE 
+                    };
+                    result.cubePool = SETUP_POOL_SIZE + preserved;
                 }
                 return result;
             };

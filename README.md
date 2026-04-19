@@ -52,12 +52,11 @@ When harvesting or facing events, roll a **d6 Interference Die**.
 
 Stability (5 Points) represents your physical hardware's health.
 
-* **Losing Stability:** Occurs when failing **Event Cards**, failing certain **Hex Hazards**, or losing a **Hustle**.
 * **The Hard Reboot:** If Stability hits **0**:
 1. **Return to starting hex** (Home Nebula).
 2. **Attributes reset to 1**.
 3. **Stability resets to 3**.
-4. **Cube Pool resets to 12**.
+4. **Cube Pool resets to 8 + 50% of acquired cubes**.
 5. **Raw Matter is cleared** (0).
 6. **Data Clusters reset to 1**.
 
@@ -67,12 +66,9 @@ Stability (5 Points) represents your physical hardware's health.
 
 When two players occupy the same hex, the active player chooses one of two paths:
 
-### A. The Hustle (Competitive Selection)
+### A. The Hustle (Competitive Selection - Inactive)
 
-A battle for resources. Both players roll **Interference d6 + LOG**.
-
-* **Winner:** Takes 1 Resource (Matter/Data) from the loser OR forces the loser to lose **1 Stability**.
-* **Tie:** Both players lose 1 Stability.
+A battle for resources. Currently auto-skipped in development.
 
 ### B. The Handshake (Horizontal Gene Transfer)
 
@@ -94,12 +90,13 @@ To prevent "Overfitting" (having stats that are too expensive to keep), players 
 1. **Pruning (Optional):** Before paying costs, you may voluntarily **permanently remove**  points from your attributes. Gain  **Matter** immediately.
 2. **Upgrade:** Spend **3 Data** for +1 permanent attribute point.
 3. **Maintenance Cost:**
-* **Total Points 12–16:** Pay 1 Matter.
-* **Total Points 21–28:** Pay 2 Matter.
-* **Total Points 29+:** Pay 3 Matter.
+Calculated as `1 + floor((Total Base Attributes - 12) / 2)`.
+* **Total Points 12-13:** 1 Matter.
+* **Total Points 14-15:** 2 Matter.
+* **Total Points 16-17:** 3 Matter.
+* **Total Points 18+:** 4+ Matter.
 
-
-4. **The Brownout:** If you cannot pay, you must **permanently reduce** your attributes by 2 points for every 1 Matter you are short.
+4. **The Brownout:** If you cannot pay, you must **permanently reduce** your attributes (Pruning).
 
 ---
 

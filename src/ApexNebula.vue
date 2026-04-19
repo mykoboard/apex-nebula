@@ -17,6 +17,13 @@ import SingularityWonScreen from './components/SingularityWonScreen.vue';
 import { logger } from './lib/logger';
 
 import { Dna, Crown, AlertTriangle } from 'lucide-vue-next';
+import { 
+  INITIAL_STABILITY, 
+  INITIAL_DATA, 
+  INITIAL_MATTER, 
+  INITIAL_ATTRIBUTE_VALUE, 
+  SETUP_POOL_SIZE 
+} from './constants';
 
 const props = defineProps<GameProps>();
 
@@ -49,15 +56,20 @@ const { snapshot, send } = useMachine(apexNebulaMachine, {
     players: players.value,
     genomes: players.value.map((p) => ({
       playerPublicKey: p.publicKey,
-      stability: 3,
-      dataClusters: 0,
-      rawMatter: 0,
+      stability: INITIAL_STABILITY,
+      dataClusters: INITIAL_DATA,
+      rawMatter: INITIAL_MATTER,
       insightTokens: 0,
       lockedSlots: [],
-      baseAttributes: { NAV: 1, LOG: 1, DEF: 1, SCN: 1 },
+      baseAttributes: { 
+        NAV: INITIAL_ATTRIBUTE_VALUE, 
+        LOG: INITIAL_ATTRIBUTE_VALUE, 
+        DEF: INITIAL_ATTRIBUTE_VALUE, 
+        SCN: INITIAL_ATTRIBUTE_VALUE 
+      },
       mutationModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
       tempAttributeModifiers: { NAV: 0, LOG: 0, DEF: 0, SCN: 0 },
-      cubePool: 8,
+      cubePool: SETUP_POOL_SIZE,
     })),
     pieces: players.value.map((p, i) => {
       const starts = ['H-4--2', 'H--2-4', 'H--4-2', 'H-2--4'];
