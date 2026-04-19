@@ -955,12 +955,11 @@ export const apexNebulaMachine = createMachine({
         }),
 
         finalizeOptimization: assign(({ context }) => {
-            // Maintenance: Stability -> 3, Data/Matter cap at 2, Reset Mutations
+            // Maintenance: Data/Matter cap at 2, Reset Mutations
             return {
                 genomes: context.genomes.map(g => {
                     return {
                         ...g,
-                        stability: 3,
                         mutationModifiers: { ...EMPTY_MODS },
                         dataClusters: Math.min(2, g.dataClusters),
                         rawMatter: Math.min(2, g.rawMatter), // Cap at 2, deduction already happened in confirmPhase

@@ -56,7 +56,7 @@ import uiGuide from './assets/ui-guide.png';
           </div>
           <div>
             <h4 class="font-semibold text-white/90">4. Optimization Phase (Downclocking)</h4>
-            <p class="text-white/70 text-sm">Players can spend 3 Data to increase an attribute permanently. A maintenance cost in Matter must be paid based on total base attributes. Failure to pay requires pruning (permanently reducing) an attribute. At phase end, Stability is restored to 3, and excess Data/Matter above 2 are discarded.</p>
+            <p class="text-white/70 text-sm">Players can spend 3 Data to increase an attribute permanently. A maintenance cost in Matter must be paid based on total base attributes. Failure to pay requires pruning (permanently reducing) an attribute. At phase end, excess Data/Matter above 2 are discarded.</p>
           </div>
         </div>
       </section>
