@@ -138,17 +138,17 @@ const gridWithData = computed(() => {
         </text>
 
         <!-- Threshold & Attribute (Centered) -->
-        <g v-if="!hex.isHome" :transform="`translate(${hex.posX - 40}, ${hex.posY - 12})`">
+        <g v-if="!hex.isHome" :transform="`translate(${hex.posX - 40}, ${hex.posY - 20})`">
           <foreignObject width="80" height="40" class="overflow-visible">
             <div class="flex items-center justify-center gap-2 w-full h-full">
               <span v-if="hex.threshold > 0" class="text-[20px] font-black text-white leading-none drop-shadow-lg">
                 {{ hex.threshold }}
               </span>
-              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center bg-black/80 px-2.5 py-1.5 rounded-lg border border-white/20 backdrop-blur-md shadow-xl">
+              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center">
                 <template v-if="Array.isArray(hex.targetAttribute)">
-                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="14" class="text-white drop-shadow-md" />
+                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="14" class="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
                 </template>
-                <AttributeIcon v-else :type="hex.targetAttribute" size="16" class="text-white drop-shadow-md" />
+                <AttributeIcon v-else :type="hex.targetAttribute" size="16" class="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
               </div>
             </div>
           </foreignObject>
