@@ -869,9 +869,8 @@ export const apexNebulaMachine = createMachine({
             const newConfirmed = [...context.confirmedPlayers, event.playerPublicKey];
             logger.machine('Confirmed list updated', newConfirmed);
 
-            // Deduct matter immediately upon confirming (skip if in setup phase, as cost doesn't apply)
             const playerGenome = context.genomes.find(g => g.playerPublicKey === event.playerPublicKey);
-            const cost = (playerGenome && context.gamePhase !== 'setup') ? calculateMaintenanceCost(playerGenome) : 0;
+            const cost = (playerGenome && context.gamePhase === 'optimization') ? calculateMaintenanceCost(playerGenome) : 0;
             const newGenomes = context.genomes.map(g =>
                 g.playerPublicKey === event.playerPublicKey
                     ? { ...g, rawMatter: Math.max(0, g.rawMatter - cost) }
