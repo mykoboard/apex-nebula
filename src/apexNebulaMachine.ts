@@ -558,6 +558,11 @@ export const apexNebulaMachine = createMachine({
             logger.machine('EVALUATING EVENT', event.name);
             const checkType = event.checkType;
 
+            let newGenomes = [...context.genomes];
+            let newHexGrid = [...context.hexGrid];
+            let newPieces = [...context.pieces];
+            const eventResults: Record<string, { roll: number; modifier: number; success: boolean }> = {};
+
             // 1. Calculate threshold
             let thresholdValue = 0;
             if (typeof event.threshold === 'number') {
@@ -574,22 +579,17 @@ export const apexNebulaMachine = createMachine({
                 logger.machine('Finding targets', target);
                 if (!target || target === 'self') {
                     const all = context.players.map(p => p.publicKey);
-                    logger.machine('Target resolution (self -> all players)', all);
                     return all;
                 }
                 if (target === 'all') return context.players.map(p => p.publicKey);
                 if (target === 'priority') return [context.priorityPublicKey];
                 if (target === 'lowest_sum') {
                     const sorted = [...newGenomes].sort((a, b) => calculateFitness(a, 'TOTAL_SUM') - calculateFitness(b, 'TOTAL_SUM'));
-                    const low = sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
-                    logger.machine('Target resolution (lowest_sum)', low);
-                    return low;
+                    return sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
                 }
                 if (target === 'highest_sum') {
                     const sorted = [...newGenomes].sort((a, b) => calculateFitness(b, 'TOTAL_SUM') - calculateFitness(a, 'TOTAL_SUM'));
-                    const high = sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
-                    logger.machine('Target resolution (highest_sum)', high);
-                    return high;
+                    return sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
                 }
                 if (target === 'most_data') {
                     const sorted = [...newGenomes].sort((a, b) => b.dataClusters - a.dataClusters);
@@ -600,24 +600,25 @@ export const apexNebulaMachine = createMachine({
                     return sorted.length > 0 ? [sorted[0].playerPublicKey] : [];
                 }
                 if (target === 'highest_stat') {
-                    return context.players.map(p => p.publicKey);
+                    const highest = [...newGenomes].sort((a, b) => {
+                        const maxA = Math.max(...Object.values(a.baseAttributes));
+                        const maxB = Math.max(...Object.values(b.baseAttributes));
+                        return maxB - maxA;
+                    });
+                    return highest.length > 0 ? [highest[0].playerPublicKey] : [];
                 }
                 if (target === 'sum_26_plus') {
-                    const res = newGenomes.filter(g => calculateFitness(g, 'TOTAL_SUM') >= 26).map(g => g.playerPublicKey);
-                    logger.machine('Target resolution (sum_26_plus)', res);
-                    return res;
+                    return newGenomes.filter(g => calculateFitness(g, 'TOTAL_SUM') >= 26).map(g => g.playerPublicKey);
                 }
                 if (target === 'stat_8_plus') {
-                    const res = newGenomes.filter(g => Object.values(g.baseAttributes).some(v => v >= 8)).map(g => g.playerPublicKey);
-                    logger.machine('Target resolution (stat_8_plus)', res);
-                    return res;
+                    return newGenomes.filter(g => Object.values(g.baseAttributes).some(v => v >= 8)).map(g => g.playerPublicKey);
                 }
                 return [];
             };
 
             const applyEffect = (genome: any, effect: any) => {
                 const newGenome = { ...genome };
-                const amount = effect.fraction ? Math.floor(genome.dataClusters * 0.5) : (effect.amount || 0);
+                const amount = effect.details?.fraction ? Math.floor(genome.dataClusters * 0.5) : (effect.amount || 0);
 
                 switch (effect.type) {
                     case 'stability':
@@ -764,11 +765,6 @@ export const apexNebulaMachine = createMachine({
 
                 return { genomes, pieces };
             };
-
-            let newGenomes = [...context.genomes];
-            let newHexGrid = [...context.hexGrid];
-            let newPieces = [...context.pieces];
-            const eventResults: Record<string, { roll: number; modifier: number; success: boolean }> = {};
 
             const prng = createPRNG((context.seed || 12345) + context.round + 999);
 

@@ -5,6 +5,8 @@ import type { AttributeType, PlayerGenome } from '../types';
 import { calculateMaintenanceCost } from '../utils';
 import AttributeIcon from './AttributeIcon.vue';
 
+import { INITIAL_STABILITY } from '../constants';
+
 interface Props {
   genome: PlayerGenome;
   editable?: boolean;
@@ -98,7 +100,7 @@ const getSlotClass = (attrType: AttributeType, i: number, colorClass: string) =>
           <Heart class="w-3 h-3 text-red-500 fill-red-500/20" />
           <div class="flex gap-1">
             <div
-              v-for="(_, i) in 3"
+              v-for="(_, i) in INITIAL_STABILITY"
               :key="i"
               class="w-3 h-3 rounded-sm border transition-all"
               :class="[
