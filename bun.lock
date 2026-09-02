@@ -5,7 +5,6 @@
     "": {
       "name": "@mykoboard/apex-nebula",
       "dependencies": {
-        "@mykoboard/integration": "0.1.0-dev.6",
         "@xstate/vue": "^4.0.4",
         "clsx": "^2.1.1",
         "lucide-vue-next": "^0.577.0",
@@ -14,17 +13,17 @@
         "xstate": "^5.30.0",
       },
       "devDependencies": {
-        "@happy-dom/global-registrator": "^20.8.9",
+        "@happy-dom/global-registrator": "^20.9.0",
         "@originjs/vite-plugin-federation": "^1.4.1",
         "@tailwindcss/postcss": "^4.2.2",
         "@types/jsdom": "^28.0.1",
         "@types/node": "^25.6.0",
-        "@vitejs/plugin-vue": "^6.0.5",
+        "@vitejs/plugin-vue": "^6.0.6",
         "@vitest/ui": "^4.1.4",
         "@vue/test-utils": "^2.4.6",
-        "happy-dom": "^20.8.9",
+        "happy-dom": "^20.9.0",
         "jsdom": "^29.0.2",
-        "postcss": "^8.5.9",
+        "postcss": "^8.5.10",
         "tailwindcss": "^4.2.2",
         "typescript": "~5.9.3",
         "vite": "6.4.1",
@@ -131,8 +130,6 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
-
-    "@mykoboard/integration": ["@mykoboard/integration@0.1.0-dev.6", "https://npm.pkg.github.com/download/@mykoboard/integration/0.1.0-dev.6/aa7873974b56e842f21b214d6148a5cd2816e8c6", { "dependencies": { "react": "^19.2.3" } }, "sha512-2ks6V9PWhRoJszRb8QLt0HSJZjPOtss5yLpleQ4ND01MzyfvMge4IPqG7JyrLRMHuqiaqS6FBfR980rQRGNlOg=="],
 
     "@one-ini/wasm": ["@one-ini/wasm@0.1.1", "", {}, "sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw=="],
 
@@ -453,8 +450,6 @@
     "proto-list": ["proto-list@1.2.4", "", {}, "sha512-vtK/94akxsTMhe0/cbfpR+syPuszcuwhqVjJq26CuNDgFGj682oRBXOP5MJpv2r7JtE8MsiepGIqvvOTBwn2vA=="],
 
     "punycode": ["punycode@2.3.1", "", {}, "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg=="],
-
-    "react": ["react@19.2.4", "", {}, "sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ=="],
 
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 

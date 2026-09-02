@@ -72,16 +72,16 @@ const gridWithData = computed(() => {
 
 <template>
   <div
-    class="relative w-full aspect-square max-w-4xl mx-auto p-12 bg-slate-900/50 rounded-[3rem] border border-white/5 backdrop-blur-2xl shadow-2xl ring-1 ring-white/5 group overflow-hidden"
+    class="relative w-full aspect-square max-w-4xl mx-auto p-8 bg-slate-900/90 rounded-[2.5rem] border border-white/10 shadow-2xl group overflow-hidden"
   >
     <!-- Background Grid Accent -->
     <div
       class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.05),transparent)] pointer-events-none"
     />
 
-    <svg viewBox="-450 -450 900 900" class="w-full h-full drop-shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+    <svg viewBox="-450 -450 900 900" class="w-full h-full">
       <!-- Visual Connections/Constellations -->
-      <g class="opacity-10">
+      <g class="opacity-15">
         <circle cx="0" cy="0" r="120" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="4 8" />
         <circle cx="0" cy="0" r="230" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2 12" />
         <circle cx="0" cy="0" r="340" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="1 16" />
@@ -91,12 +91,11 @@ const gridWithData = computed(() => {
         v-for="hex in gridWithData"
         :key="hex.id"
         @click="emit('hexClick', hex.id)"
-        class="cursor-pointer group/hex transition-all duration-500"
+        class="cursor-pointer group/hex"
       >
         <!-- Glow Effect -->
         <polygon
           :points="hex.points"
-          class="transition-all duration-700"
           :class="hex.isSingularity ? 'fill-indigo-500/20' : 'fill-transparent hover:fill-white/5'"
         />
 
@@ -104,14 +103,14 @@ const gridWithData = computed(() => {
         <polygon
           :points="hex.points"
           :style="{ stroke: hex.color }"
-          class="transition-all duration-300 stroke-[1.5] group-hover/hex:stroke-[3.5]"
+          class="stroke-[1.5] group-hover/hex:stroke-[3.5]"
           :class="[
             hex.isSingularity
-              ? 'opacity-100 shadow-[0_0_20px_rgba(129,140,248,0.5)]'
+              ? 'opacity-100'
               : hex.isHome
               ? 'opacity-40'
               : 'opacity-80 group-hover/hex:opacity-100',
-            hex.inRange && !hex.isOccupiedByLocal ? 'stroke-[4] stroke-white drop-shadow-[0_0_8px_white]' : ''
+            hex.inRange && !hex.isOccupiedByLocal ? 'stroke-[3] stroke-white' : ''
           ]"
         />
 
@@ -124,7 +123,7 @@ const gridWithData = computed(() => {
           :y="hex.posY - 32"
           text-anchor="middle"
           :style="{ fill: hex.color }"
-          class="text-[9px] font-black uppercase tracking-widest pointer-events-none select-none drop-shadow-md"
+          class="text-[9px] font-black uppercase tracking-widest pointer-events-none select-none"
         >
           <tspan
             v-for="(word, idx) in hex.type.split(/(?=[A-Z])/)"
@@ -136,27 +135,29 @@ const gridWithData = computed(() => {
           </tspan>
         </text>
 
-        <!-- Threshold & Attribute (Centered) -->
-        <g v-if="!hex.isHome" :transform="`translate(${hex.posX - 40}, ${hex.posY - 20})`">
-          <foreignObject width="80" height="40" class="overflow-visible">
-            <div class="flex items-center justify-center gap-2 w-full h-full">
-              <span v-if="hex.threshold > 0" class="text-[20px] font-black text-white leading-none drop-shadow-lg">
-                {{ hex.threshold }}
-              </span>
-              <div v-if="hex.targetAttribute" class="flex gap-1 justify-center">
-                <template v-if="Array.isArray(hex.targetAttribute)">
-                  <AttributeIcon v-for="attr in hex.targetAttribute" :key="attr" :type="attr" size="14" class="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
-                </template>
-                <AttributeIcon v-else :type="hex.targetAttribute" size="16" class="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" />
-              </div>
-            </div>
-          </foreignObject>
+        <!-- Threshold & Attribute (Native SVG Text) -->
+        <g v-if="!hex.isHome" :transform="`translate(${hex.posX}, ${hex.posY - 4})`">
+          <text
+            text-anchor="middle"
+            dominant-baseline="central"
+            class="text-[16px] font-black fill-white select-none pointer-events-none"
+          >
+            {{ hex.threshold > 0 ? hex.threshold : '' }}
+            <tspan
+              v-if="hex.targetAttribute"
+              class="text-[11px] font-bold"
+              :fill="hex.color"
+              dx="4"
+            >
+              {{ Array.isArray(hex.targetAttribute) ? hex.targetAttribute.join('/') : hex.targetAttribute }}
+            </tspan>
+          </text>
         </g>
 
         <!-- Resource Icons (Bottom) -->
         <g v-if="!hex.isHome" :transform="`translate(${hex.posX}, ${hex.posY + 26})`">
           <g v-if="hex.yield.matter > 0" :transform="hex.yield.data > 0 ? 'translate(-14, 0)' : 'translate(0, 0)'">
-            <rect x="-10" y="-10" width="20" height="20" rx="4" fill="#f59e0b" stroke="#fcd34d" stroke-width="1.5" class="drop-shadow-md" />
+            <rect x="-10" y="-10" width="20" height="20" rx="4" fill="#f59e0b" stroke="#fcd34d" stroke-width="1.5" />
             <text
               x="0"
               y="4"
@@ -167,7 +168,7 @@ const gridWithData = computed(() => {
             </text>
           </g>
           <g v-if="hex.yield.data > 0" :transform="hex.yield.matter > 0 ? 'translate(14, 0)' : 'translate(0, 0)'">
-            <circle r="10" fill="#06b6d4" stroke="#67e8f9" stroke-width="1.5" class="drop-shadow-md" />
+            <circle r="10" fill="#06b6d4" stroke="#67e8f9" stroke-width="1.5" />
             <text
               x="0"
               y="4"
@@ -183,19 +184,18 @@ const gridWithData = computed(() => {
         <g
           v-for="(p, pIdx) in hex.hexPieces"
           :key="`${p.playerPublicKey}-${pIdx}`"
-          class="animate-in zoom-in-50 fade-in duration-500"
         >
           <circle
             :cx="hex.posX"
             :cy="hex.posY"
-            :r="hex.isSingularity ? '35' : '28'"
+            :r="hex.isSingularity ? '32' : '26'"
             fill="none"
             :stroke="playerColors[p.playerPublicKey]"
-            stroke-width="4"
-            class="opacity-20 animate-pulse"
+            stroke-width="3"
+            class="opacity-40"
           />
-          <circle :cx="hex.posX" :cy="hex.posY" r="18" :fill="playerColors[p.playerPublicKey]" class="shadow-xl" />
-          <circle :cx="hex.posX" :cy="hex.posY" r="12" fill="white" class="opacity-20" />
+          <circle :cx="hex.posX" :cy="hex.posY" r="16" :fill="playerColors[p.playerPublicKey]" />
+          <circle :cx="hex.posX" :cy="hex.posY" r="8" fill="white" class="opacity-40" />
         </g>
       </g>
     </svg>

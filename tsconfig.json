@@ -23,6 +23,9 @@
         "paths": {
             "@/*": [
                 "./src/*"
+            ],
+            "@mykoboard/integration": [
+                "./src/lib/integration.ts"
             ]
         }
     },

@@ -5,18 +5,22 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-    base: "/apex-nebula/",
+    base: "./",
     plugins: [
         vue(),
-        federation({
-            name: "apex-nebula",
-            filename: "remoteEntry.js",
-            exposes: {
-                "./ApexNebula": "./src/ApexNebula.vue",
-                "./GameInfo": "./src/GameInfo.vue",
-            },
-            shared: ["vue", "@xstate/vue", "xstate", "@mykoboard/integration"],
-        }),
+        ...(process.env.FEDERATION === "true"
+            ? [
+                  federation({
+                      name: "apex-nebula",
+                      filename: "remoteEntry.js",
+                      exposes: {
+                          "./ApexNebula": "./src/ApexNebula.vue",
+                          "./GameInfo": "./src/GameInfo.vue",
+                      },
+                      shared: ["vue", "@xstate/vue", "xstate"],
+                  }),
+              ]
+            : []),
     ],
     server: {
         host: true,
@@ -54,11 +58,19 @@ export default defineConfig(({ mode }) => ({
     resolve: {
         alias: {
             "@": path.resolve(__dirname, "./src"),
+            "@mykoboard/integration": path.resolve(__dirname, "./src/lib/integration.ts"),
         },
     },
     build: {
         modulePreload: false,
         target: "esnext",
-        cssCodeSplit: true,
+        cssCodeSplit: false,
+        rollupOptions: {
+            output: {
+                inlineDynamicImports: true,
+                entryFileNames: "assets/index.js",
+                assetFileNames: "assets/[name].[ext]",
+            },
+        },
     },
 }));

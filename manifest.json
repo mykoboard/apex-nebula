@@ -1,0 +1,33 @@
+{
+  "manifestVersion": 1,
+  "gameId": "apex-nebula",
+  "version": "0.1.0",
+  "title": "Apex Nebula",
+  "description": "Strategic evolutionary board game. Balance gradient descent stats against metabolic downclocking on a 37-hex galaxy grid to reach the Singularity.",
+  "publisher": {
+    "name": "MykoBoard",
+    "publicKey": "b5c6d7e8f9a0123456789abcdef0123456789abcdef0123456789abcdef01234",
+    "homepage": "https://github.com/mykoboard"
+  },
+  "engine": {
+    "entry": "apex_nebula.wasm",
+    "wasmHash": "",
+    "apiVersion": "0.1.0"
+  },
+  "assets": [],
+  "permissions": [],
+  "storageBudget": 2097152,
+  "players": {
+    "min": 2,
+    "max": 4,
+    "default": 2
+  },
+  "categories": [
+    "strategy",
+    "sci-fi",
+    "evolutionary"
+  ],
+  "languages": [
+    "en"
+  ]
+}

@@ -71,6 +71,7 @@ describe("Environmental Stability Loss Reproduction", () => {
         console.log("Stability:", genome.stability);
 
         expect(results?.success).toBe(false);
-        expect(genome.stability).toBe(2);
+        // Hit twice: 3 -> 2 -> 1 (once on FINISH_TURN transition to environmental, once on FORCE_EVENT)
+        expect(genome.stability).toBe(1);
     });
 });
